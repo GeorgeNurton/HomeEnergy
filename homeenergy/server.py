@@ -146,6 +146,7 @@ class State:
                 "latest": d.get("inverter"),
                 "rates": d.get("rates"),
                 "dispatches": dispatches,
+                "extras": extra_times(planned, octo_rates),
                 "ohme": d.get("ohme"),
                 "control": d.get("control"),
                 "cheap": {"now": cheap, "price_p": price, "why": why} if octo_rates is not None else None,
@@ -156,6 +157,42 @@ class State:
                 "costs": d.get("costs"),
                 "solar_forecast": d.get("solar_forecast"),
             }
+
+
+def extra_times(planned, rates):
+    """The parts of the car's slots that fall OUTSIDE the night cheap window, merged and sorted.
+    Those are the only times worth telling people about: the night is cheap anyway."""
+    if not rates:
+        return []
+    low = min(r["p"] for r in rates)
+    nights = [(_dt(r["from"]), _dt(r["to"])) for r in rates if r["p"] <= low + 0.01 and r["to"]]
+    pieces = []
+    for p in planned or []:
+        parts = [(_dt(p["start"]), _dt(p["end"]))]
+        for nf, nt in nights:
+            nxt = []
+            for a, b in parts:
+                if b <= nf or a >= nt:
+                    nxt.append((a, b))
+                    continue
+                if a < nf:
+                    nxt.append((a, nf))
+                if b > nt:
+                    nxt.append((nt, b))
+            parts = nxt
+        pieces += [x for x in parts if x[1] > x[0]]
+    pieces.sort()
+    merged = []
+    for a, b in pieces:
+        if merged and a <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    return [{"start": a.isoformat(), "end": b.isoformat()} for a, b in merged]
+
+
+def _dt(ts):
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
 
 def _z(ts):

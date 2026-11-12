@@ -63,6 +63,7 @@
   .pill { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--line); color: var(--muted); }
   .pill.on { background: var(--batt); color: #fff; }
   #slots { margin-top: 6px; }
+  .night { margin-bottom: 8px; }
   #slots div { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
   .errs { color: var(--warn); font-size: 13px; margin-top: 6px; }
   dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 6px 0 0; font-size: 14px; }
@@ -303,12 +304,13 @@ function tariff(d) {
     $("cheap").className = "pill" + (d.cheap.now ? " on" : "");
   }
   const now = Date.now();
-  const planned = ((d.dispatches || {}).planned || []).filter(p => new Date(p.end) > now);
-  let html = "Night 23:30–05:30 is always cheap.<br>";
-  html += planned.length
-    ? "<b>Car charge slots</b>" + planned.map(p => `<div><span>${day(p.start)}${hm(p.start)}–${hm(p.end)}${p.extra ? ' <span class="pill on">extra</span>' : ""}</span><span>${p.kwh != null ? p.kwh.toFixed(1) + " kWh" : ""}</span></div>`).join("")
-      + (planned.some(p => p.extra) ? `<div class="sub">"extra" = cheap for the whole house too, once the car starts charging</div>` : "")
-    : "No car charge slots planned";
+  const extras = (d.extras || []).filter(p => new Date(p.end) > now);
+  const night = d.rates && d.rates.rates && d.rates.rates.length ? d.rates.rates.reduce((a, r) => r.p < a.p ? r : a) : null;
+  let html = `<div class="night">🌙 <b>Cheap every night 23:30–05:30</b>${night ? ` · ${night.p}p` : ""}</div>`;
+  html += extras.length
+    ? "<b>Extra cheap times</b> <span class='sub'>(only while the car is charging)</span>" +
+      extras.map(p => `<div><span>${day(p.start)}${hm(p.start)}–${hm(p.end)}</span></div>`).join("")
+    : "<span class='sub'>No extra cheap times planned</span>";
   if (d.rates && d.rates.name) html += `<div class="sub" style="margin-top:6px">${d.rates.name}</div>`;
   const errs = ["rates", "dispatches"].filter(k => d.errors[k]).map(k => `${k}: ${d.errors[k]}`);
   if (errs.length) html += `<div class="errs">${errs.join("<br>")}</div>`;

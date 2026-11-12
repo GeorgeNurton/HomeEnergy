@@ -52,13 +52,14 @@ def advise(snap, now=None):
                           and _t(r["from"]) <= now and (r["to"] is None or now < _t(r["to"]))), None)
     next_night = next((r for r in rates if low is not None and r["p"] <= low + 0.01
                        and _t(r["from"]) > now), None)
-    next_extra = next((p for p in planned if p.get("extra") and _t(p["start"]) > now), None)
+    # Only the parts of car slots outside the night window matter (the night is cheap anyway)
+    next_extra = next((p for p in (snap.get("extras") or []) if _t(p["start"]) > now), None)
     nxt = []
     if next_night:
         nxt.append(f"cheap from {_when(_t(next_night['from']), now)}")
     if next_extra and (not next_night or _t(next_extra["start"]) < _t(next_night["from"])):
         nxt.append(f"maybe {_when(_t(next_extra['start']), now)}-{_hm(_t(next_extra['end']))} "
-                   f"if the car charges then")
+                   f"if the car is charging")
     next_text = "Next: " + ", or ".join(nxt) if nxt else ""
 
     # Next sunny spell from the forecast (later today, else tomorrow)
