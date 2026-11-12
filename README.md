@@ -25,7 +25,8 @@ Settings live in `config.toml`. API keys (Octopus, Ohme) will go in `secrets.tom
 1. ✅ Read-only dashboard (inverter)
 2. ✅ Octopus (Intelligent Octopus Go Max prices, car smart slots) and Ohme (is the car actually charging?)
 3. Battery control (`controller.py`), **dry run** now (`[control] live = false` in config.toml):
-   - Night 23:30-05:30 is always cheap for the house; the inverter's own 00:30-05:30 charge is left alone.
+   - Night 23:30-05:30 is always cheap for the house: HOLD the battery so the house runs from the grid.
+     (Holding only stops discharging, so the inverter's own 00:30-05:30 charge still runs.)
    - Car slots reaching outside the night window are "extra" cheap house time, but only once the
      car is actually charging. Then: HOLD the battery (no discharging into the car).
    - Missing or stale data always means NORMAL, so if the Pi dies the battery behaves as it always has.

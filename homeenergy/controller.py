@@ -1,7 +1,9 @@
 """Battery control: stop the battery feeding the car during extra (daytime) cheap slots.
 
 The rule:
-  - Night 23:30-05:30: leave the inverter alone. Its own 00:30-05:30 charge handles it.
+  - Night 23:30-05:30: HOLD the battery. The house is cheap, so it runs from the grid instead of
+    draining the battery (the inverter's own charge only starts at 00:30). Holding only stops
+    discharging, so that 00:30-05:30 charge still happens as normal.
   - An "extra" car slot (one reaching outside the night window) AND the Ohme says the car
     is actually charging -> HOLD the battery (no discharging). Grid power is cheap then,
     so stored energy is better saved for the evening.
@@ -33,11 +35,23 @@ def decide(snap, now=None):
 
     if not inv or now_s - inv["time"] > STALE_S:
         return "normal", "no fresh inverter reading"
+
+    # Night: the whole house is cheap, so run it from the grid and keep the battery.
+    # Holding only stops discharging, so the inverter's own 00:30 grid charge still happens.
+    rates = (snap.get("rates") or {}).get("rates") or []
+    if rates:
+        low = min(r["p"] for r in rates)
+        night = next((r for r in rates if r["p"] <= low + 0.01 and _t(r["from"]) <= now
+                      and (r["to"] is None or now < _t(r["to"]))), None)
+        if night:
+            end = _t(night["to"]).astimezone().strftime("%H:%M") if night["to"] else "?"
+            return "hold", f"night cheap rate until {end} - house runs from the grid"
+
     slot = next((p for p in planned if _t(p["start"]) <= now < _t(p["end"])), None)
     if not slot:
         return "normal", "no car slot now"
     if not slot.get("extra"):
-        return "normal", "night slot - inverter's own schedule handles it"
+        return "normal", "car slot inside the night window"
     if not ohme or now_s - ohme["time"] > STALE_S:
         return "normal", "extra slot, but no fresh Ohme reading"
     if not ohme.get("charging"):
