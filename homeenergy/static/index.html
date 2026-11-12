@@ -40,6 +40,19 @@
   svg { width: 100%; height: 160px; display: block; }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 6px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .light { border-left: 10px solid var(--line); }
+  .light[data-c=green] { border-color: var(--batt); } .light[data-c=green] .adv-title { color: var(--batt); }
+  .light[data-c=amber] { border-color: var(--solar); } .light[data-c=amber] .adv-title { color: var(--solar); }
+  .light[data-c=red] { border-color: var(--warn); } .light[data-c=red] .adv-title { color: var(--warn); }
+  .adv-title { font-size: 24px; font-weight: 700; margin: 2px 0 4px; }
+  .save { color: var(--batt); }
+  .mid { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .split { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--line); margin: 12px 0 6px; }
+  .split .cheap { background: var(--batt); } .split .peak { background: var(--warn); }
+  .day { display: grid; grid-template-columns: 70px 1fr 64px; gap: 8px; align-items: center; font-size: 14px; margin: 5px 0; font-variant-numeric: tabular-nums; }
+  .day .bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; }
+  .day .bar span { height: 100%; }
+  .day .amt { text-align: right; }
   .row2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .pill { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--line); color: var(--muted); }
   .pill.on { background: var(--batt); color: #fff; }
@@ -54,6 +67,24 @@
 <main>
   <header><h1>Home Energy</h1><span><a href="/log" id="loglink">log</a> · <span id="updated">connecting…</span></span></header>
   <div id="alert"></div>
+
+  <div class="card light" id="advice" data-c="grey">
+    <div class="label">Big appliances (oven, dryer, dishwasher)?</div>
+    <div class="adv-title" id="adv-title">–</div>
+    <div class="sub" id="adv-detail"></div>
+    <div class="sub" id="adv-next"></div>
+  </div>
+
+  <div class="card" id="money" style="display:none">
+    <div class="label">Today</div>
+    <div class="row2">
+      <div><div class="big" id="m-spent">–</div><div class="sub">spent so far</div></div>
+      <div style="text-align:right"><div class="big save" id="m-saved">–</div><div class="sub">saved by solar &amp; battery</div></div>
+    </div>
+    <div class="split"><div class="cheap" id="m-cheapbar"></div><div class="peak" id="m-peakbar"></div></div>
+    <div class="row2 sub"><span id="m-cheap"></span><span id="m-peak"></span></div>
+    <div class="sub" id="m-note"></div>
+  </div>
 
   <div class="card" id="batt">
     <div class="label">Battery</div>
@@ -97,6 +128,20 @@
       <span><i style="background:var(--house)"></i>House</span>
       <span><i style="background:var(--grid)"></i>Grid import</span>
       <span><i style="background:var(--batt)"></i>Battery %</span>
+    </div>
+  </div>
+
+  <div class="card" id="hist-card" style="display:none">
+    <div class="label">Spending</div>
+    <div class="row2" style="margin:6px 0 10px">
+      <div><div class="mid" id="h-week">–</div><div class="sub">this week · saved <span id="h-week-s"></span></div></div>
+      <div style="text-align:right"><div class="mid" id="h-month">–</div><div class="sub">this month · saved <span id="h-month-s"></span></div></div>
+    </div>
+    <div id="h-days"></div>
+    <div class="legend">
+      <span><i style="background:var(--batt)"></i>Cheap</span>
+      <span><i style="background:var(--warn)"></i>Full price</span>
+      <span><i style="background:var(--line)"></i>Standing charge</span>
     </div>
   </div>
 
@@ -152,6 +197,49 @@ function render(d) {
   tariff(d);
   car(d);
   control(d);
+  advice(d.advice);
+  money(d.costs);
+}
+
+const gbp = p => (p < 0 ? "-" : "") + "£" + (Math.abs(p) / 100).toFixed(2);
+
+function advice(a) {
+  if (!a) return;
+  $("advice").dataset.c = a.colour;
+  $("adv-title").textContent = a.title;
+  $("adv-detail").textContent = a.detail;
+  $("adv-next").textContent = a.next;
+}
+
+function money(c) {
+  if (!c || !c.today) return;
+  const t = c.today;
+  $("money").style.display = "block";
+  $("m-spent").textContent = gbp(t.spent_p);
+  $("m-saved").textContent = gbp(t.saved_p);
+  const tot = t.cheap_p + t.peak_p || 1;
+  $("m-cheapbar").style.width = (100 * t.cheap_p / tot) + "%";
+  $("m-peakbar").style.width = (100 * t.peak_p / tot) + "%";
+  $("m-cheap").textContent = `Cheap ${gbp(t.cheap_p)} · ${t.cheap_kwh} kWh`;
+  $("m-peak").textContent = `Full price ${gbp(t.peak_p)} · ${t.peak_kwh} kWh`;
+  $("m-note").textContent = `Includes ${gbp(t.standing_p)} standing charge` +
+    (t.partial ? " · counting started part-way through today" : "") + " · estimate, the bill is the real figure";
+
+  $("hist-card").style.display = "block";
+  $("h-week").textContent = gbp(c.week.spent_p);
+  $("h-week-s").textContent = gbp(c.week.saved_p);
+  $("h-month").textContent = gbp(c.month.spent_p);
+  $("h-month-s").textContent = gbp(c.month.saved_p);
+  const max = Math.max(...c.days.map(d => d.cheap_p + d.peak_p + d.standing_p), 1);
+  $("h-days").innerHTML = c.days.slice(0, 7).map(d => {
+    const lbl = new Date(d.date + "T12:00").toLocaleDateString([], {weekday: "short", day: "numeric"});
+    const w = v => (100 * Math.max(v, 0) / max).toFixed(1) + "%";
+    return `<div class="day"><span>${lbl}</span><div class="bar">` +
+      `<span style="width:${w(d.cheap_p)};background:var(--batt)"></span>` +
+      `<span style="width:${w(d.peak_p)};background:var(--warn)"></span>` +
+      `<span style="width:${w(d.standing_p)};background:var(--line)"></span></div>` +
+      `<span class="amt">${gbp(d.spent_p)}</span></div>`;
+  }).join("");
 }
 
 function control(d) {

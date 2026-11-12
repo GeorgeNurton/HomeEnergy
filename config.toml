@@ -16,3 +16,9 @@ grid_charge = true
 # The inverter's normal overnight charge. The Pi keeps slot 1 at this outside extra slots,
 # so change it here, not in the phone app.
 night_slot = "2330-0530"
+
+[costs]
+# Daily standing charge, pence (Intelligent Octopus Go Max, Nov 2026)
+standing_charge_p = 47.74
+# What you're paid per kWh exported (0 if you have no export tariff)
+export_p = 0.0

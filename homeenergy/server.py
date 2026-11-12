@@ -13,7 +13,9 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from .advice import advise
 from .controller import Controller
+from .costs import CostTracker
 from .givenergy import Inverter
 from .octopus import Octopus, cheap_now
 from .ohme import Ohme
@@ -150,6 +152,7 @@ class State:
                 "error": self.errors.get("inverter"),
                 "history": list(self.history),
                 "alerts": list(self.alerts_cache),
+                "costs": d.get("costs"),
             }
 
 
@@ -213,7 +216,12 @@ def make_handler(state, events):
             elif self.path == "/log":
                 self._send(200, _log_page(events.recent()).encode(), "text/html; charset=utf-8")
             elif self.path == "/api/status":
-                self._send(200, json.dumps(state.snapshot()).encode(), "application/json")
+                snap = state.snapshot()
+                try:
+                    snap["advice"] = advise(snap)
+                except Exception as e:  # never let the advice break the dashboard
+                    snap["advice"] = {"colour": "grey", "title": "Advice unavailable", "detail": str(e), "next": ""}
+                self._send(200, json.dumps(snap).encode(), "application/json")
             else:
                 self._send(404, b"not found", "text/plain")
 
@@ -284,6 +292,28 @@ def main():
         return result
 
     start("control", control_step, 30, delay=20)  # let the first readings arrive
+
+    cost_cfg = cfg.get("costs", {})
+    tracker = CostTracker(ROOT / "data" / "daily.json", standing_p=cost_cfg.get("standing_charge_p", 0.0),
+                          export_p=cost_cfg.get("export_p", 0.0))
+    last_counted = [None]
+
+    def cost_step():
+        snap = state.snapshot()
+        inv, cheap = snap.get("latest"), snap.get("cheap")
+        if inv and inv["time"] != last_counted[0]:
+            last_counted[0] = inv["time"]
+            tracker.add(inv, (cheap or {}).get("price_p"), (cheap or {}).get("now", False))
+        return tracker.summary()
+
+    start("costs", cost_step, 5, delay=15)
+
+    import atexit
+    import signal
+    import sys
+    atexit.register(tracker.save)
+    # A normal stop (systemd, Ctrl+C) saves the day's totals on the way out.
+    signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
 
     port = cfg["web"].get("port", 8080)
     log.info("dashboard on http://0.0.0.0:%d", port)
