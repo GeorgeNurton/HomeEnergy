@@ -153,14 +153,17 @@ function tariff(d) {
   card.style.display = "block";
   if (d.cheap) {
     $("price").textContent = d.cheap.price_p != null ? d.cheap.price_p.toFixed(1) + "p" : "–";
-    $("cheap").textContent = d.cheap.now ? "CHEAP · " + d.cheap.why : "standard rate";
+    $("cheap").textContent = d.cheap.now ? "CHEAP · " + d.cheap.why : (d.cheap.why || "standard rate");
     $("cheap").className = "pill" + (d.cheap.now ? " on" : "");
   }
   const now = Date.now();
   const planned = ((d.dispatches || {}).planned || []).filter(p => new Date(p.end) > now);
-  let html = planned.length
-    ? "<b>Smart charge slots</b>" + planned.map(p => `<div><span>${day(p.start)}${hm(p.start)}–${hm(p.end)}</span><span>${p.kwh != null ? p.kwh.toFixed(1) + " kWh" : ""}</span></div>`).join("")
-    : "No extra cheap slots planned";
+  let html = "Night 23:30–05:30 is always cheap.<br>";
+  html += planned.length
+    ? "<b>Car charge slots</b>" + planned.map(p => `<div><span>${day(p.start)}${hm(p.start)}–${hm(p.end)}${p.extra ? ' <span class="pill on">extra</span>' : ""}</span><span>${p.kwh != null ? p.kwh.toFixed(1) + " kWh" : ""}</span></div>`).join("")
+      + (planned.some(p => p.extra) ? `<div class="sub">"extra" = cheap for the whole house too, once the car starts charging</div>` : "")
+    : "No car charge slots planned";
+  if (d.rates && d.rates.name) html += `<div class="sub" style="margin-top:6px">${d.rates.name}</div>`;
   const errs = ["rates", "dispatches"].filter(k => d.errors[k]).map(k => `${k}: ${d.errors[k]}`);
   if (errs.length) html += `<div class="errs">${errs.join("<br>")}</div>`;
   $("slots").innerHTML = html;

@@ -9,6 +9,7 @@ import threading
 import time
 import tomllib
 from collections import deque
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -53,16 +54,42 @@ class State:
             octo_rates = (d.get("rates") or {}).get("rates")
             planned = (d.get("dispatches") or {}).get("planned")
             cheap, price, why = cheap_now(octo_rates, planned)
+            dispatches = d.get("dispatches")
+            if dispatches and octo_rates:
+                # Mark slots that reach outside the night window: those are the *extra* cheap
+                # house time. Slots inside the night window only steer the car.
+                low = min(r["p"] for r in octo_rates)
+                nights = [(r["from"], r["to"]) for r in octo_rates if r["p"] <= low + 0.01]
+                dispatches = dict(dispatches, planned=[
+                    dict(p, extra=not any(f <= _z(p["start"]) and _z(p["end"]) <= (t or "9999")
+                                          for f, t in nights))
+                    for p in planned or []])
+            if why == "smart charge slot":
+                # A daytime slot only gives the house the cheap rate once the car is actually
+                # charging, so check the Ohme too (and don't trust a stale Ohme reading).
+                ohme = d.get("ohme") or {}
+                fresh = time.time() - ohme.get("time", 0) < 120
+                if fresh and ohme.get("charging"):
+                    why = "smart slot, car charging"
+                else:
+                    cheap, why = False, "smart slot, car not charging yet"
+                    rates = (d.get("rates") or {}).get("rates") or []
+                    price = max((r["p"] for r in rates), default=price)
             return {
                 "latest": d.get("inverter"),
                 "rates": d.get("rates"),
-                "dispatches": d.get("dispatches"),
+                "dispatches": dispatches,
                 "ohme": d.get("ohme"),
                 "cheap": {"now": cheap, "price_p": price, "why": why} if octo_rates is not None else None,
                 "errors": dict(self.errors),
                 "error": self.errors.get("inverter"),
                 "history": list(self.history),
             }
+
+
+def _z(ts):
+    """Any ISO time -> 'YYYY-MM-DDTHH:MM:SSZ' in UTC, so times compare as plain text."""
+    return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def poller(name, fn, state, interval):

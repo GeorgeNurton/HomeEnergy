@@ -17,6 +17,25 @@ def _parse(ts):
     return datetime.fromisoformat(ts.replace("Z", "+00:00")) if ts else None
 
 
+def _iso(dt):
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _last_sunday(year, month):
+    d = datetime(year, month + 1, 1) - timedelta(days=1) if month < 12 else datetime(year, 12, 31)
+    return d - timedelta(days=(d.weekday() + 1) % 7)
+
+
+def uk_local(day, hour, minute):
+    """UK wall-clock time on `day` as a UTC datetime (BST = last Sun Mar to last Sun Oct, 01:00 UTC).
+    Done by hand so it works on Windows too, which has no timezone database by default."""
+    naive = datetime(day.year, day.month, day.day, hour, minute)
+    bst_start = _last_sunday(day.year, 3).replace(hour=1)
+    bst_end = _last_sunday(day.year, 10).replace(hour=1)
+    offset = timedelta(hours=1) if bst_start <= naive - timedelta(hours=1) < bst_end else timedelta(0)
+    return (naive - offset).replace(tzinfo=timezone.utc)
+
+
 class Octopus:
     def __init__(self, api_key, account, timeout=20):
         self.key = api_key.strip()
@@ -75,9 +94,37 @@ class Octopus:
         path = (f"/v1/products/{product}/electricity-tariffs/{code}/standard-unit-rates/"
                 f"?period_from={start}&page_size=200")
         rows = self._rest(path)["results"]
-        out = [{"from": r["valid_from"], "to": r["valid_to"], "p": round(r["value_inc_vat"], 2)} for r in rows]
-        out.sort(key=lambda r: r["from"])
-        return {"tariff": code, "rates": out}
+        if rows:  # classic Intelligent Go: Octopus publishes the time bands itself
+            out = [{"from": r["valid_from"], "to": r["valid_to"], "p": round(r["value_inc_vat"], 2)} for r in rows]
+            out.sort(key=lambda r: r["from"])
+            return {"tariff": code, "name": product, "rates": out}
+        return self._four_rate(product, code)
+
+    def _four_rate(self, product, code):
+        """Newer 'Go Max' style tariff: house day/night rates plus separate car (EV device) rates.
+        Octopus gives the prices but not the times, so the night band is the advertised 23:30-05:30."""
+        info = self._rest(f"/v1/products/{product}/")
+        tariff = None
+        for region in info.get("four_rate_ev_electricity_tariffs", {}).values():
+            for t in region.values():
+                if t.get("code") == code:
+                    tariff = t
+        if not tariff:
+            raise RuntimeError(f"tariff {code} not found in product {product}")
+        day, night = tariff["day_unit_rate_inc_vat"], tariff["night_unit_rate_inc_vat"]
+        out = []
+        today = datetime.now(timezone.utc).date()
+        for offset in (-1, 0, 1):
+            d = today + timedelta(days=offset)
+            n_start = uk_local(d, 23, 30)
+            n_end = uk_local(d + timedelta(days=1), 5, 30)
+            next_night = uk_local(d + timedelta(days=1), 23, 30)
+            out.append({"from": _iso(n_start), "to": _iso(n_end), "p": round(night, 2)})
+            out.append({"from": _iso(n_end), "to": _iso(next_night), "p": round(day, 2)})
+        return {"tariff": code, "name": info.get("display_name", product), "rates": out,
+                "car_offpeak_p": round(tariff["ev_device_off_peak_unit_rate_inc_vat"], 2),
+                "car_peak_p": round(tariff["ev_device_peak_unit_rate_inc_vat"], 2),
+                "four_rate": True}
 
     # ---- intelligent dispatches ----------------------------------------
     def devices(self):
@@ -94,7 +141,9 @@ class Octopus:
             q = ('query { flexPlannedDispatches(deviceId: "%s") { start end type energyAddedKwh } }' % d["id"])
             for p in self._gql(q)["flexPlannedDispatches"] or []:
                 planned.append({"device": d.get("provider") or d.get("deviceType"), "start": p["start"],
-                                "end": p["end"], "type": p.get("type"), "kwh": p.get("energyAddedKwh")})
+                                "end": p["end"], "type": p.get("type"),
+                                # Octopus sends this as text, negative (energy flowing into the car)
+                                "kwh": abs(float(p["energyAddedKwh"])) if p.get("energyAddedKwh") else None})
         planned.sort(key=lambda p: p["start"])
         return {"devices": [{"id": d["id"], "type": d.get("deviceType"), "provider": d.get("provider"),
                              "state": (d.get("status") or {}).get("currentState")} for d in self._device_ids],
