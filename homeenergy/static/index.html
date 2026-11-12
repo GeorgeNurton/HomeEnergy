@@ -154,8 +154,9 @@ function control(d) {
   if (!c) return;
   $("control-card").style.display = "block";
   $("ctl-mode").innerHTML = `<span class="pill${c.mode === "live" ? " on" : ""}">${c.mode}</span>`;
-  $("ctl-action").textContent = c.action === "hold" ? "Holding battery" : "Normal (eco)";
-  $("ctl-reason").textContent = c.reason;
+  $("ctl-action").textContent = {hold: "Holding battery", charge: "Charging from grid"}[c.action] || "Normal (eco)";
+  if (c.error) $("ctl-reason").textContent = c.reason + " - ERROR: " + c.error;
+  if (!c.error) $("ctl-reason").textContent = c.reason;
   const t = s => new Date(s * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
   $("ctl-log").innerHTML = c.log.slice(-5).reverse()
     .map(e => `<div><span>${t(e.time)} ${e.done}</span><span>${e.battery_pct ?? "–"}%</span></div>`).join("");

@@ -161,8 +161,10 @@ def main():
     else:
         log.info("Ohme not configured (secrets.toml) - skipping")
 
-    ctrl = Controller(inverter, live=cfg.get("control", {}).get("live", False))
-    log.info("battery control: %s", "LIVE" if ctrl.live else "dry run")
+    ctl_cfg = cfg.get("control", {})
+    ctrl = Controller(inverter, live=ctl_cfg.get("live", False), grid_charge=ctl_cfg.get("grid_charge", False))
+    log.info("battery control: %s, grid charging in extra slots %s",
+             "LIVE" if ctrl.live else "dry run", "on" if ctrl.grid_charge else "off")
 
     def control_step():
         before = ctrl.log[-1] if ctrl.log else None

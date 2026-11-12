@@ -10,3 +10,5 @@ port = 8080             # the Pi uses 80 so the phone address is just http://ene
 [control]
 # true = the Pi pauses battery discharge during extra car slots. false = dry run (log only).
 live = true
+# Grid charging in extra slots. OFF: this inverter refuses charge slot 2 (HR 31/32), tested 2026-11-12.
+grid_charge = false
