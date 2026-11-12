@@ -22,3 +22,14 @@ night_slot = "2330-0530"
 standing_charge_p = 47.74
 # What you're paid per kWh exported (0 if you have no export tariff)
 export_p = 0.0
+
+[solar]
+# Forecast from forecast.solar. Only the postcode district centre (SO41) is sent, not the address.
+lat = 50.76
+lon = -1.57
+kwp = 3.2          # panel size
+tilt = 40          # degrees from flat; a slightly steeper than average roof
+azimuth = -20      # 0 = south, -90 = east: the panels face 160 deg, 20 deg east of south
+# Partial shade early and late: forecast halved before/after these hours
+shade_before = 8
+shade_after = 17

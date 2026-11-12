@@ -53,6 +53,12 @@
   .day .bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; }
   .day .bar span { height: 100%; }
   .day .amt { text-align: right; }
+  .sunday { margin-top: 10px; }
+  .sunday .row2 { font-size: 14px; }
+  .hours { display: flex; align-items: flex-end; gap: 2px; height: 54px; margin-top: 4px; }
+  .hours div { flex: 1; background: var(--solar); border-radius: 2px 2px 0 0; min-height: 1px; opacity: .85; }
+  .hours div.past { opacity: .3; }
+  .hlabels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
   .row2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .pill { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--line); color: var(--muted); }
   .pill.on { background: var(--batt); color: #fff; }
@@ -131,6 +137,11 @@
     </div>
   </div>
 
+  <div class="card" id="sun-card" style="display:none">
+    <div class="label">Solar forecast</div>
+    <div id="sun-days"></div>
+  </div>
+
   <div class="card" id="hist-card" style="display:none">
     <div class="label">Spending</div>
     <div class="row2" style="margin:6px 0 10px">
@@ -199,6 +210,27 @@ function render(d) {
   control(d);
   advice(d.advice);
   money(d.costs);
+  sun(d.solar_forecast);
+}
+
+function sun(f) {
+  if (!f || !f.days) return;
+  $("sun-card").style.display = "block";
+  const now = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  const key = dt => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+  const today = key(now), tom = key(new Date(now.getTime() + 864e5));
+  const max = Math.max(...Object.values(f.hours), 500);
+  $("sun-days").innerHTML = [[today, "Today"], [tom, "Tomorrow"]].filter(([k]) => f.days[k] != null).map(([k, name]) => {
+    let bars = "";
+    for (let h = 6; h <= 18; h++) {
+      const w = f.hours[`${k} ${pad(h)}:00`] || 0;
+      const past = k === today && h < now.getHours();
+      bars += `<div class="${past ? "past" : ""}" style="height:${(100 * w / max).toFixed(0)}%" title="${pad(h)}:00 ${w} W"></div>`;
+    }
+    return `<div class="sunday"><div class="row2"><b>${name}</b><span>about ${f.days[k]} kWh</span></div>` +
+      `<div class="hours">${bars}</div><div class="hlabels"><span>06</span><span>09</span><span>12</span><span>15</span><span>18</span></div></div>`;
+  }).join("");
 }
 
 const gbp = p => (p < 0 ? "-" : "") + "£" + (Math.abs(p) / 100).toFixed(2);

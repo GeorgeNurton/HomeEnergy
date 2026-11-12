@@ -1,14 +1,23 @@
 """Is now a good time to run the oven, tumble dryer, dishwasher or washing machine?
 
-  GREEN  cheap rate now (night, or an extra car slot while the car charges), or spare solar
+  GREEN  cheap rate now (night, or an extra car slot while the car charges), or sunshine that's
+         truly spare. Solar goes house first, then battery, then the iBoost (hot water) once the
+         battery is nearly full. Using sun that would have filled the battery just moves the cost
+         to the evening at full price, so it only counts as spare when the battery is nearly full
+         or the rest of today's forecast will fill it anyway.
   AMBER  full price, but the battery has plenty to cover it
   RED    full price and little in the battery: wait if you can
 Plus when the next cheap time is.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-SPARE_SOLAR_W = 1500      # roughly a dishwasher or washing machine heating
+from .solar import sunny_window
+
+SUNNY_W = 1500            # roughly a dishwasher or washing machine heating
 BATTERY_OK_PCT = 50
+BATTERY_FULLISH_PCT = 90
+BATTERY_KWH = 8.2
+HOUSE_BASE_KW = 0.4       # rough background use while the sun's up
 
 
 def _t(ts):
@@ -52,17 +61,41 @@ def advise(snap, now=None):
                    f"if the car charges then")
     next_text = "Next: " + ", or ".join(nxt) if nxt else ""
 
+    # Next sunny spell from the forecast (later today, else tomorrow)
+    fc = snap.get("solar_forecast")
+    local = now.astimezone()
+    sun_text = ""
+    for label, day in (("today", local.date()), ("tomorrow", local.date() + timedelta(days=1))):
+        win = sunny_window(fc, day.isoformat())
+        if win and (label == "tomorrow" or win[1] > local.hour + 1):
+            start = max(win[0], local.hour + 1) if label == "today" else win[0]
+            sun_text = f"Sunny {label} {start:02d}:00-{win[1]:02d}:00 (up to {win[2] / 1000:.1f} kW)"
+            break
+    if sun_text:
+        next_text = (next_text + ". " if next_text else "") + sun_text
+
     price = cheap.get("price_p")
-    spare = inv["solar_w"] - inv["house_w"]
+    # Is the sunshine spare? (Battery nearly full, or the rest of today will fill it anyway.)
+    remaining_kwh, sun_hours = 0.0, 0
+    for k, w in ((fc or {}).get("hours") or {}).items():
+        if k.startswith(local.date().isoformat()) and int(k[11:13]) > local.hour and w > 0:
+            remaining_kwh += w / 1000
+            sun_hours += 1
+    space_kwh = BATTERY_KWH * (100 - inv["battery_pct"]) / 100
+    will_fill = remaining_kwh - HOUSE_BASE_KW * sun_hours > space_kwh + 1.0
+    sunny = inv["solar_w"] >= SUNNY_W and inv.get("grid_w", 0) <= 100 and         (inv["battery_pct"] >= BATTERY_FULLISH_PCT or will_fill)
     if cheap.get("now"):
         if current_night:
             detail = f"Night rate ({price}p) until {_hm(_t(current_night['to']))}" if current_night["to"] else "Night rate"
         else:
             detail = f"Cheap ({price}p) while the car is charging"
         return {"colour": "green", "title": "Good time - it's cheap now", "detail": detail, "next": ""}
-    if spare >= SPARE_SOLAR_W:
-        return {"colour": "green", "title": "Good time - spare sunshine",
-                "detail": f"{spare / 1000:.1f} kW of solar going spare", "next": next_text}
+    if sunny:
+        return {"colour": "green", "title": "Good time - the sun's out",
+                "detail": f"{inv['solar_w'] / 1000:.1f} kW of solar and the battery " +
+                          ("is nearly full" if inv["battery_pct"] >= BATTERY_FULLISH_PCT else "will fill anyway") +
+                          " - otherwise it just heats the water",
+                "next": next_text}
     if inv["battery_pct"] >= BATTERY_OK_PCT:
         return {"colour": "amber", "title": "OK - the battery can cover it",
                 "detail": f"Battery {inv['battery_pct']}%. A long run (oven, dryer) may still use some "

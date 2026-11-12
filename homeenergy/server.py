@@ -19,6 +19,7 @@ from .costs import CostTracker
 from .givenergy import Inverter
 from .octopus import Octopus, cheap_now
 from .ohme import Ohme
+from .solar import SolarForecast
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = Path(__file__).resolve().parent / "static"
@@ -153,6 +154,7 @@ class State:
                 "history": list(self.history),
                 "alerts": list(self.alerts_cache),
                 "costs": d.get("costs"),
+                "solar_forecast": d.get("solar_forecast"),
             }
 
 
@@ -263,6 +265,13 @@ def main():
         start("ohme", Ohme(oh["email"], oh["password"]).status, 30)
     else:
         log.info("Ohme not configured (secrets.toml) - skipping")
+
+    sol = cfg.get("solar")
+    if sol and sol.get("kwp"):
+        fc = SolarForecast(sol["lat"], sol["lon"], sol["tilt"], sol["azimuth"], sol["kwp"],
+                           shade_before=sol.get("shade_before", 8), shade_after=sol.get("shade_after", 17))
+        start("solar_forecast", fc.fetch, 60 * 60)   # free service: 12 lookups an hour, use 1
+    SOURCE_NAMES["solar_forecast"] = "Solar forecast"
 
     ctl_cfg = cfg.get("control", {})
     night_cfg = str(ctl_cfg.get("night_slot", "2330-0530"))
