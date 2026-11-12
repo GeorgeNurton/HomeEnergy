@@ -70,6 +70,13 @@
     <div class="sub" id="grid-today"></div>
   </div>
 
+  <div class="card" id="control-card" style="display:none">
+    <div class="label">Battery control <span id="ctl-mode"></span></div>
+    <div class="row2"><span class="big" id="ctl-action">–</span></div>
+    <div class="sub" id="ctl-reason"></div>
+    <div class="sub" id="ctl-log" style="margin-top:6px"></div>
+  </div>
+
   <div class="card" id="tariff-card" style="display:none">
     <div class="label">Electricity price</div>
     <div class="row2"><span class="big" id="price">–</span><span class="pill" id="cheap"></span></div>
@@ -139,6 +146,19 @@ function render(d) {
   chart(d.history);
   tariff(d);
   car(d);
+  control(d);
+}
+
+function control(d) {
+  const c = d.control;
+  if (!c) return;
+  $("control-card").style.display = "block";
+  $("ctl-mode").innerHTML = `<span class="pill${c.mode === "live" ? " on" : ""}">${c.mode}</span>`;
+  $("ctl-action").textContent = c.action === "hold" ? "Holding battery" : "Normal (eco)";
+  $("ctl-reason").textContent = c.reason;
+  const t = s => new Date(s * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+  $("ctl-log").innerHTML = c.log.slice(-5).reverse()
+    .map(e => `<div><span>${t(e.time)} ${e.done}</span><span>${e.battery_pct ?? "–"}%</span></div>`).join("");
 }
 
 const hm = iso => new Date(iso).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});

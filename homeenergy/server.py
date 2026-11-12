@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from .controller import Controller
 from .givenergy import Inverter
 from .octopus import Octopus, cheap_now
 from .ohme import Ohme
@@ -80,6 +81,7 @@ class State:
                 "rates": d.get("rates"),
                 "dispatches": dispatches,
                 "ohme": d.get("ohme"),
+                "control": d.get("control"),
                 "cheap": {"now": cheap, "price_p": price, "why": why} if octo_rates is not None else None,
                 "errors": dict(self.errors),
                 "error": self.errors.get("inverter"),
@@ -92,8 +94,9 @@ def _z(ts):
     return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def poller(name, fn, state, interval):
+def poller(name, fn, state, interval, delay=0):
     """Call fn every `interval` seconds forever; one source failing never stops the others."""
+    time.sleep(delay)
     while True:
         try:
             state.set(name, fn())
@@ -138,8 +141,8 @@ def main():
     secrets = tomllib.loads(secrets_file.read_text()) if secrets_file.exists() else {}
     state = State()
 
-    def start(name, fn, interval):
-        threading.Thread(target=poller, args=(name, fn, state, interval), daemon=True).start()
+    def start(name, fn, interval, delay=0):
+        threading.Thread(target=poller, args=(name, fn, state, interval, delay), daemon=True).start()
 
     inverter = Inverter(cfg["givenergy"]["host"])
     start("inverter", inverter.status, cfg["givenergy"].get("poll_seconds", 10))
@@ -157,6 +160,19 @@ def main():
         start("ohme", Ohme(oh["email"], oh["password"]).status, 30)
     else:
         log.info("Ohme not configured (secrets.toml) - skipping")
+
+    ctrl = Controller(live=cfg.get("control", {}).get("live", False))
+
+    def control_step():
+        before = len(ctrl.log)
+        result = ctrl.step(state.snapshot())
+        if len(ctrl.log) > before:
+            e = ctrl.log[-1]
+            log.info("CONTROL %s -> %s: %s; %s (battery %s%%, %s W)", e["from"], e["to"], e["reason"],
+                     e["done"], e["battery_pct"], e["battery_w"])
+        return result
+
+    start("control", control_step, 30, delay=20)  # let the first readings arrive
 
     port = cfg["web"].get("port", 8080)
     log.info("dashboard on http://0.0.0.0:%d", port)

@@ -6,3 +6,7 @@ poll_seconds = 10
 
 [web]
 port = 8080             # the Pi uses 80 so the phone address is just http://energy.local
+
+[control]
+# false = dry run: decide and log only, never change the inverter.
+live = false
