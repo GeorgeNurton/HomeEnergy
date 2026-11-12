@@ -161,14 +161,15 @@ def main():
     else:
         log.info("Ohme not configured (secrets.toml) - skipping")
 
-    ctrl = Controller(live=cfg.get("control", {}).get("live", False))
+    ctrl = Controller(inverter, live=cfg.get("control", {}).get("live", False))
+    log.info("battery control: %s", "LIVE" if ctrl.live else "dry run")
 
     def control_step():
-        before = len(ctrl.log)
+        before = ctrl.log[-1] if ctrl.log else None
         result = ctrl.step(state.snapshot())
-        if len(ctrl.log) > before:
+        if ctrl.log and ctrl.log[-1] is not before:
             e = ctrl.log[-1]
-            log.info("CONTROL %s -> %s: %s; %s (battery %s%%, %s W)", e["from"], e["to"], e["reason"],
+            log.info("CONTROL %s: %s; %s (battery %s%%, %s W)", e["to"], e["reason"],
                      e["done"], e["battery_pct"], e["battery_w"])
         return result
 

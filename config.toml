@@ -8,5 +8,5 @@ poll_seconds = 10
 port = 8080             # the Pi uses 80 so the phone address is just http://energy.local
 
 [control]
-# false = dry run: decide and log only, never change the inverter.
-live = false
+# true = the Pi pauses battery discharge during extra car slots. false = dry run (log only).
+live = true
