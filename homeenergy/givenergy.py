@@ -197,8 +197,8 @@ class Inverter:
                 "reserve_pct": hr[110],
                 "charge_limit": hr[111],
                 "discharge_limit": hr[112],   # 0 = battery paused (held)
-                "slot2_start": hr[31],        # hhmm as a number, e.g. 1510
-                "slot2_end": hr[32],
+                "slot1_start": hr[94],        # hhmm as a number, e.g. 2330
+                "slot1_end": hr[95],
             },
             "inverter_serial": text(13, 18),
             "battery_serial": text(8, 13),

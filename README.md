@@ -24,15 +24,18 @@ Settings live in `config.toml`. API keys (Octopus, Ohme) will go in `secrets.tom
 ## Plan
 1. ✅ Read-only dashboard (inverter)
 2. ✅ Octopus (Intelligent Octopus Go Max prices, car smart slots) and Ohme (is the car actually charging?)
-3. ✅ Battery control (`controller.py`), **LIVE** since 2026-11-12 (`[control] live` in config.toml):
-   - Car slot reaching outside the 23:30-05:30 night window ("extra") AND the car actually charging
-     -> HOLD: battery discharge limit (HR 112) set to 0%, restored afterwards (normally 50%).
-   - Night is left to the inverter: its own grid charge now runs 23:30-05:30.
-   - Missing or stale data means NORMAL. The setting is re-checked every 30 s (self-healing), and a
-     limit found stuck at 0% on startup is restored.
-   - If it dies mid-hold the battery stays paused: restart it, or set the discharge rate back in the app.
-   - Next: optionally grid-charge the battery during extra slots too.
-4. Extras: small screen, PHEV smart plug, supply-current limit (100 A main fuse)
+3. ✅ Battery control (`controller.py`), **LIVE** since 2026-11-12 (`[control]` in config.toml):
+   - Extra car slot (reaching outside the 23:30-05:30 night window) AND the car actually charging:
+     - HOLD: battery discharge limit (HR 112) 0%, so it doesn't drain into the car.
+     - CHARGE (`grid_charge`): borrow charge slot 1 (HR 94/95) from now to the slot's end, so the
+       battery fills from the grid at the cheap rate. (Slot 2, HR 31/32, is refused by this inverter.)
+   - Otherwise NORMAL: discharge limit restored, slot 1 back to `night_slot` (23:30-05:30).
+   - Settings are re-checked every 30 s (self-healing); a crash mid-slot is undone on restart.
+   - If it dies mid-charge, the night charge is missed until restart: set the charge slot back to
+     23:30-05:30 and discharge rate to 50% in the phone app.
+4. ✅ Event log (`logs/events.jsonl`, page at `/log`) and red alert banner on the dashboard for
+   refused/failed inverter changes and any source failing for 5+ minutes.
+5. Extras: small screen, PHEV smart plug, supply-current limit (100 A main fuse)
 
 ## Register notes (checked against the real inverter, Nov 2026)
 | Reg | Meaning |

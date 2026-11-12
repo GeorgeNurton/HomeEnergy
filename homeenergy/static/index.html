@@ -22,7 +22,8 @@
   main { max-width: 560px; margin: 0 auto; padding: 16px; }
   header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
   h1 { font-size: 20px; margin: 0; }
-  #updated { color: var(--muted); font-size: 13px; }
+  #updated, #loglink { color: var(--muted); font-size: 13px; }
+  header > span { color: var(--muted); font-size: 13px; }
   .card { background: var(--card); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
   .grid .card { margin: 0; }
@@ -51,7 +52,7 @@
 </head>
 <body>
 <main>
-  <header><h1>Home Energy</h1><span id="updated">connecting…</span></header>
+  <header><h1>Home Energy</h1><span><a href="/log" id="loglink">log</a> · <span id="updated">connecting…</span></span></header>
   <div id="alert"></div>
 
   <div class="card" id="batt">
@@ -112,9 +113,13 @@ function render(d) {
   const s = d.latest;
   const age = s ? Date.now() / 1000 - s.time : Infinity;
   const alert = $("alert");
-  if (d.error || age > 60) {
+  const msgs = [...(d.alerts || [])];
+  if ((d.error || age > 60) && !msgs.some(m => m.startsWith("Inverter")))
+    msgs.unshift(s ? `Inverter not answering (last reading ${Math.round(age / 60)} min ago)` : "Waiting for the inverter…");
+  if (msgs.length) {
     alert.style.display = "block";
-    alert.textContent = s ? `Inverter not answering (last reading ${Math.round(age / 60)} min ago)` : "Waiting for the inverter…";
+    alert.innerHTML = "⚠ " + msgs.map(m => m.replace(/&/g, "&amp;").replace(/</g, "&lt;")).join("<br>⚠ ")
+      + ' <a href="/log" style="color:inherit">see log</a>';
   } else alert.style.display = "none";
   if (!s) return;
 
