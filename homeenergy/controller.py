@@ -1,9 +1,9 @@
 """Battery control: stop the battery feeding the car during extra (daytime) cheap slots.
 
 The rule:
-  - Night 23:30-05:30: HOLD the battery. The house is cheap, so it runs from the grid instead of
-    draining the battery (the inverter's own charge only starts at 00:30). Holding only stops
-    discharging, so that 00:30-05:30 charge still happens as normal.
+  - Night 23:30-05:30: HOLD the battery. The house is cheap, so it runs from the grid. (The
+    inverter's own grid charge was moved to 23:30-05:30 on 2026-11-12, so this is mostly a
+    backstop; holding only stops discharging, so that charge still happens as normal.)
   - An "extra" car slot (one reaching outside the night window) AND the Ohme says the car
     is actually charging -> HOLD the battery (no discharging). Grid power is cheap then,
     so stored energy is better saved for the evening.

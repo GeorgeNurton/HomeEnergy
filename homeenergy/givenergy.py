@@ -12,6 +12,7 @@ Wire format (GivEnergy's wrapper around Modbus):
 """
 import socket
 import struct
+import threading
 import time
 
 PORT = 8899
@@ -43,6 +44,8 @@ class Inverter:
     def __init__(self, host: str, timeout: float = 5.0):
         self.host = host
         self.timeout = timeout
+        # The dongle handles one connection at a time, so reads and writes take turns.
+        self._lock = threading.Lock()
 
     def _read_block(self, sock, func, base, count=60):
         """Send one request and wait for the matching reply frame."""
@@ -88,6 +91,10 @@ class Inverter:
 
     def read_all(self):
         """Read the register blocks we need. Returns (holding, input) dicts."""
+        with self._lock:
+            return self._read_all()
+
+    def _read_all(self):
         holding, inp = {}, {}
         with socket.create_connection((self.host, PORT), timeout=self.timeout) as s:
             s.settimeout(self.timeout)
@@ -105,6 +112,51 @@ class Inverter:
                             raise
                 store.update({base + i: v for i, v in enumerate(regs)})
         return holding, inp
+
+    # Only these settings may ever be written, as a guard against typos.
+    WRITABLE = {
+        31: "charge slot 2 start (hhmm)",
+        32: "charge slot 2 end (hhmm)",
+        94: "charge slot 1 start (hhmm)",
+        95: "charge slot 1 end (hhmm)",
+        96: "grid charging enabled (0/1)",
+        111: "battery charge limit (%)",
+        112: "battery discharge limit (%)",
+        116: "charge target (%)",
+    }
+
+    def write(self, register, value):
+        """Write one holding register, then read it back. Returns the value read back."""
+        with self._lock:
+            return self._write(register, value)
+
+    def _write(self, register, value):
+        if register not in self.WRITABLE:
+            raise ValueError(f"register {register} is not on the writable list")
+        if not 0 <= value <= 0xFFFF:
+            raise ValueError("value out of range")
+        inner = struct.pack(">BBHH", 0x11, 0x06, register, value)
+        inner += struct.pack("<H", _crc16(inner))
+        payload = b"\x01\x02" + b"AB1234G567" + struct.pack(">Q", 8) + inner
+        frame = struct.pack(">HHH", 0x5959, 0x0001, len(payload)) + payload
+        with socket.create_connection((self.host, PORT), timeout=self.timeout) as s:
+            s.sendall(frame)
+            s.settimeout(self.timeout)
+            try:
+                s.recv(4096)  # acknowledgement; we verify by reading back instead
+            except socket.timeout:
+                pass
+        time.sleep(1)
+        base = (register // 60) * 60
+        for _ in range(3):
+            try:
+                with socket.create_connection((self.host, PORT), timeout=self.timeout) as s:
+                    s.settimeout(self.timeout)
+                    regs = self._read_block(s, HOLDING, base)
+                return regs[register - base]
+            except TimeoutError:
+                continue
+        raise TimeoutError("wrote, but could not read back to confirm")
 
     def status(self):
         """Read and decode into plain numbers for the dashboard."""
