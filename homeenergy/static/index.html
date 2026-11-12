@@ -39,6 +39,12 @@
   svg { width: 100%; height: 160px; display: block; }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 6px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .row2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .pill { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--line); color: var(--muted); }
+  .pill.on { background: var(--batt); color: #fff; }
+  #slots { margin-top: 6px; }
+  #slots div { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+  .errs { color: var(--warn); font-size: 13px; margin-top: 6px; }
   dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 6px 0 0; font-size: 14px; }
   dt { color: var(--muted); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 </style>
@@ -62,6 +68,17 @@
     <div class="label">Grid</div>
     <div class="big" id="grid">–</div>
     <div class="sub" id="grid-today"></div>
+  </div>
+
+  <div class="card" id="tariff-card" style="display:none">
+    <div class="label">Electricity price</div>
+    <div class="row2"><span class="big" id="price">–</span><span class="pill" id="cheap"></span></div>
+    <div class="sub" id="slots"></div>
+  </div>
+
+  <div class="card" id="car-card" style="display:none">
+    <div class="label">Car charger (Ohme)</div>
+    <div class="row2"><span class="big" id="car">–</span><span class="sub" id="car-pct"></span></div>
   </div>
 
   <div class="card">
@@ -120,6 +137,42 @@ function render(d) {
   $("settings").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
 
   chart(d.history);
+  tariff(d);
+  car(d);
+}
+
+const hm = iso => new Date(iso).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+const day = iso => {
+  const t = new Date(iso), today = new Date();
+  return t.toDateString() === today.toDateString() ? "" : t.toLocaleDateString([], {weekday: "short"}) + " ";
+};
+
+function tariff(d) {
+  const card = $("tariff-card");
+  if (!d.rates && !d.errors.rates) return;
+  card.style.display = "block";
+  if (d.cheap) {
+    $("price").textContent = d.cheap.price_p != null ? d.cheap.price_p.toFixed(1) + "p" : "–";
+    $("cheap").textContent = d.cheap.now ? "CHEAP · " + d.cheap.why : "standard rate";
+    $("cheap").className = "pill" + (d.cheap.now ? " on" : "");
+  }
+  const now = Date.now();
+  const planned = ((d.dispatches || {}).planned || []).filter(p => new Date(p.end) > now);
+  let html = planned.length
+    ? "<b>Smart charge slots</b>" + planned.map(p => `<div><span>${day(p.start)}${hm(p.start)}–${hm(p.end)}</span><span>${p.kwh != null ? p.kwh.toFixed(1) + " kWh" : ""}</span></div>`).join("")
+    : "No extra cheap slots planned";
+  const errs = ["rates", "dispatches"].filter(k => d.errors[k]).map(k => `${k}: ${d.errors[k]}`);
+  if (errs.length) html += `<div class="errs">${errs.join("<br>")}</div>`;
+  $("slots").innerHTML = html;
+}
+
+function car(d) {
+  const o = d.ohme;
+  if (!o && !d.errors.ohme) return;
+  $("car-card").style.display = "block";
+  if (!o) { $("car").textContent = "not connected"; $("car-pct").textContent = d.errors.ohme; return; }
+  $("car").textContent = !o.plugged_in ? "unplugged" : o.charging ? "charging " + kw(o.power_w) : "plugged in";
+  $("car-pct").textContent = (o.car_pct != null ? o.car_pct + "% · " : "") + o.mode.toLowerCase().replace(/_/g, " ");
 }
 
 function chart(h) {
