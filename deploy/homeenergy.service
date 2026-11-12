@@ -1,0 +1,19 @@
+# Runs HomeEnergy on the Pi at boot and restarts it if it ever stops.
+# Install: sudo cp deploy/homeenergy.service /etc/systemd/system/ && sudo systemctl enable --now homeenergy
+# (USER is filled in at deploy time)
+[Unit]
+Description=HomeEnergy dashboard and battery controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=USER
+WorkingDirectory=/home/USER/HomeEnergy
+ExecStart=/usr/bin/python3 -m homeenergy
+Restart=always
+RestartSec=10
+# lets it serve on port 80 without running as root
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

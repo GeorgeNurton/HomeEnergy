@@ -1,0 +1,8 @@
+# HomeEnergy settings. Secrets (Octopus / Ohme keys) will go in secrets.toml, which git ignores.
+
+[givenergy]
+host = "192.168.1.65"   # the inverter's WiFi dongle - reserve this address in the router
+poll_seconds = 10
+
+[web]
+port = 8080             # the Pi uses 80 so the phone address is just http://energy.local

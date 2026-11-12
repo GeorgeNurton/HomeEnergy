@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f1720">
+<title>Home Energy</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #18202a; --muted: #6b7684; --line: #e3e6ea;
+    --solar: #d99a00; --house: #4a6cf7; --grid: #8a5cf6; --batt: #12a26b; --warn: #d9480f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1720; --card: #18222e; --text: #eef2f6; --muted: #93a0ae; --line: #263241;
+      --solar: #f5b82e; --house: #7b93ff; --grid: #b18cff; --batt: #3ccf8e; --warn: #ff8a4c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  #updated { color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .grid .card { margin: 0; }
+  .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+  .big { font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .solar .big { color: var(--solar); } .house .big { color: var(--house); }
+  .gridc .big { color: var(--grid); }
+  #batt .row { display: flex; justify-content: space-between; align-items: baseline; }
+  #batt .big { font-size: 40px; color: var(--batt); }
+  .bar { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; margin-top: 8px; }
+  .bar > div { height: 100%; background: var(--batt); width: 0; transition: width .6s; }
+  #alert { display: none; background: var(--warn); color: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+  svg { width: 100%; height: 160px; display: block; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 6px 0 0; font-size: 14px; }
+  dt { color: var(--muted); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Home Energy</h1><span id="updated">connecting…</span></header>
+  <div id="alert"></div>
+
+  <div class="card" id="batt">
+    <div class="label">Battery</div>
+    <div class="row"><span class="big" id="b-pct">–</span><span class="sub" id="b-flow"></span></div>
+    <div class="bar"><div id="b-bar"></div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card solar"><div class="label">Solar</div><div class="big" id="solar">–</div></div>
+    <div class="card house"><div class="label">House</div><div class="big" id="house">–</div></div>
+  </div>
+  <div class="card gridc">
+    <div class="label">Grid</div>
+    <div class="big" id="grid">–</div>
+    <div class="sub" id="grid-today"></div>
+  </div>
+
+  <div class="card">
+    <div class="label">Last 24 hours</div>
+    <svg id="chart" viewBox="0 0 500 160" preserveAspectRatio="none"></svg>
+    <div class="legend">
+      <span><i style="background:var(--solar)"></i>Solar</span>
+      <span><i style="background:var(--house)"></i>House</span>
+      <span><i style="background:var(--grid)"></i>Grid import</span>
+      <span><i style="background:var(--batt)"></i>Battery %</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">Inverter settings</div>
+    <dl id="settings"></dl>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const kw = w => Math.abs(w) >= 1000 ? (w / 1000).toFixed(2) + " kW" : Math.round(w) + " W";
+
+function render(d) {
+  const s = d.latest;
+  const age = s ? Date.now() / 1000 - s.time : Infinity;
+  const alert = $("alert");
+  if (d.error || age > 60) {
+    alert.style.display = "block";
+    alert.textContent = s ? `Inverter not answering (last reading ${Math.round(age / 60)} min ago)` : "Waiting for the inverter…";
+  } else alert.style.display = "none";
+  if (!s) return;
+
+  $("updated").textContent = new Date(s.time * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"});
+  $("b-pct").textContent = s.battery_pct + "%";
+  $("b-bar").style.width = s.battery_pct + "%";
+  $("b-flow").textContent = Math.abs(s.battery_w) < 30 ? "idle"
+    : s.battery_w < 0 ? "charging " + kw(-s.battery_w) : "discharging " + kw(s.battery_w);
+  $("solar").textContent = kw(s.solar_w);
+  $("house").textContent = kw(s.house_w);
+  $("grid").textContent = Math.abs(s.grid_w) < 30 ? "≈ 0 W"
+    : s.grid_w > 0 ? "importing " + kw(s.grid_w) : "exporting " + kw(-s.grid_w);
+  $("grid-today").textContent = `Today: ${s.import_today_kwh} kWh in · ${s.export_today_kwh} kWh out`;
+
+  const st = s.settings;
+  const rows = [
+    ["Mode", st.mode],
+    ["Grid charging", st.grid_charge_enabled ? "on" : "off"],
+    ["Charge slot 1", st.charge_slot_1],
+    ["Charge slot 2", st.charge_slot_2],
+    ["Charge target", st.charge_target_pct + "%"],
+    ["Reserve", st.reserve_pct + "%"],
+    ["Battery", `${s.battery_v.toFixed(1)} V · ${s.battery_temp_c} °C`],
+    ["Mains", `${s.grid_v} V · ${s.grid_hz} Hz`],
+    ["Inverter clock", s.inverter_clock],
+  ];
+  $("settings").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+
+  chart(d.history);
+}
+
+function chart(h) {
+  const svg = $("chart");
+  if (h.length < 2) { svg.innerHTML = ""; return; }
+  const W = 500, H = 160, t1 = Date.now() / 1000, t0 = t1 - 86400;
+  const maxW = Math.max(1000, ...h.map(p => Math.max(p.solar_w, p.house_w, p.grid_w)));
+  const x = t => ((t - t0) / 86400) * W;
+  const line = (f, scale) => h.map((p, i) => (i ? "L" : "M") + x(p.time).toFixed(1) + "," + (H - 4 - f(p) * scale).toFixed(1)).join("");
+  const sW = (H - 8) / maxW, sP = (H - 8) / 100;
+  svg.innerHTML =
+    `<path d="${line(p => p.solar_w, sW)}" fill="none" stroke="var(--solar)" stroke-width="2" vector-effect="non-scaling-stroke"/>` +
+    `<path d="${line(p => p.house_w, sW)}" fill="none" stroke="var(--house)" stroke-width="2" vector-effect="non-scaling-stroke"/>` +
+    `<path d="${line(p => Math.max(0, p.grid_w), sW)}" fill="none" stroke="var(--grid)" stroke-width="2" vector-effect="non-scaling-stroke"/>` +
+    `<path d="${line(p => p.battery_pct, sP)}" fill="none" stroke="var(--batt)" stroke-width="2" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>`;
+}
+
+async function tick() {
+  try {
+    render(await (await fetch("/api/status")).json());
+  } catch (e) {
+    $("alert").style.display = "block";
+    $("alert").textContent = "Can't reach the Home Energy box";
+  }
+}
+tick();
+setInterval(tick, 10000);
+</script>
+</body>
+</html>
