@@ -85,9 +85,11 @@ const $ = id => document.getElementById(id);
 const money = p => p == null ? "--" : (Math.abs(p) >= 100 ? "£" + (p / 100).toFixed(2) : Math.round(p) + "p");
 const kw = w => (w / 1000).toFixed(1);
 let lastOk = 0;
+let skew = 0;   // Pi's clock minus this phone's: old phones often have the wrong time
+
 
 function clock() {
-  $("clock").textContent = new Date().toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"});
+  $("clock").textContent = new Date(Date.now() + skew).toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"});
   const age = (Date.now() - lastOk) / 1000;
   document.body.classList.toggle("stale", !lastOk || age > 90);
   if (lastOk && age > 90) $("status").textContent = "no update for " + Math.round(age / 60) + " min";
@@ -95,8 +97,14 @@ function clock() {
 
 async function refresh() {
   try {
-    const r = await fetch("/api/status", {cache: "no-store"});
+    // Give up on a request after 8 s (a dropped WiFi can otherwise leave it hanging forever)
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8000);
+    const r = await fetch("/api/status", {cache: "no-store", signal: ctl.signal});
+    clearTimeout(timer);
     const d = await r.json();
+    const piNow = Date.parse(r.headers.get("Date") || "");
+    if (piNow) skew = piNow - Date.now();
     const a = d.advice || {}, inv = d.latest, cheap = d.cheap || {};
     const light = $("light");
     light.className = a.colour || "grey";
@@ -148,6 +156,18 @@ wake();
 refresh();
 setInterval(refresh, 10000);
 setInterval(clock, 15000);
+
+// Self-healing for an always-on phone:
+//  - if the phone froze the page (timers stopped), catch up the moment it wakes
+//  - if nothing has worked for 5 minutes, reload the whole page
+let lastTick = Date.now();
+const started = Date.now();
+setInterval(() => {
+  const now = Date.now();
+  if (now - lastTick > 30000) refresh();
+  lastTick = now;
+  if (now - Math.max(lastOk, started) > 300000) location.reload();
+}, 5000);
 </script>
 </body>
 </html>
