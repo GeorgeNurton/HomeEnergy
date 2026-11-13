@@ -157,6 +157,13 @@
     </div>
   </div>
 
+  <div class="card" id="bb-card" style="display:none">
+    <div class="label">Bigger battery?</div>
+    <div class="sub" style="margin:4px 0 8px">Why full-price power was bought today:</div>
+    <div id="bb-today"></div>
+    <div id="bb-est" style="margin-top:10px"></div>
+  </div>
+
   <div class="card">
     <div class="label">Inverter settings</div>
     <dl id="settings"></dl>
@@ -211,7 +218,39 @@ function render(d) {
   control(d);
   advice(d.advice);
   money(d.costs);
+  bigger(d.costs);
   sun(d.solar_forecast);
+}
+
+function bigger(c) {
+  if (!c || !c.today || !c.today.peak_why) return;
+  $("bb-card").style.display = "block";
+  const w = c.today.peak_why;
+  const why = [
+    ["empty", "Battery empty", "more battery would have covered this"],
+    ["capped", "Battery flat out", "using more than it can supply at once"],
+    ["held", "Battery paused", "during a cheap car slot - on purpose"],
+    ["other", "Catching up", "brief gaps as the load changes"],
+  ];
+  $("bb-today").innerHTML = why.map(([k, name, hint]) =>
+    `<div class="row2"><span>${name} <span class="sub">· ${hint}</span></span><b>${w[k].toFixed(1)} kWh</b></div>`).join("") +
+    `<div class="sub" style="margin-top:4px">Sun after the battery was full: ${c.today.solar_full_kwh.toFixed(1)} kWh` +
+    ` (mostly into hot water) · battery low point today ${c.today.batt_min_pct ?? "–"}%</div>`;
+  const b = c.bigger_battery || {};
+  if (!b.days) {
+    $("bb-est").innerHTML = `<div class="sub">The estimate starts after the first full day of tracking, ` +
+      `and gets better over a few weeks (winter matters most).</div>`;
+    return;
+  }
+  $("bb-est").innerHTML =
+    `<div class="sub">Over ${b.days} full day${b.days > 1 ? "s" : ""}, on average: ${b.empty_kwh_per_day} kWh a day bought ` +
+    `because the battery was empty, ${b.capped_kwh_per_day} kWh because it was flat out. ` +
+    `Each kWh moved to the night saves about ${b.gain_p_per_kwh}p.</div>` +
+    b.options.map(o => `<div class="row2" style="margin-top:6px"><span>+${o.extra_kwh} kWh of battery</span>` +
+      `<b>~${gbp(o.p_per_day)}/day · ~£${o.pounds_per_year}/yr</b></div>`).join("") +
+    `<div class="sub" style="margin-top:6px">A rough guide: scaled up from the days so far (winter days ` +
+    `overstate a year, summer days understate it). Battery seen at up to ${kw(b.max_out_w)} out / ` +
+    `${kw(b.max_in_w)} in.</div>`;
 }
 
 function sun(f) {

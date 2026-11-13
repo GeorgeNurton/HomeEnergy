@@ -388,7 +388,8 @@ def main():
         inv, cheap = snap.get("latest"), snap.get("cheap")
         if inv and inv["time"] != last_counted[0]:
             last_counted[0] = inv["time"]
-            tracker.add(inv, (cheap or {}).get("price_p"), (cheap or {}).get("now", False))
+            held = (snap.get("control") or {}).get("action") in ("hold", "charge")
+            tracker.add(inv, (cheap or {}).get("price_p"), (cheap or {}).get("now", False), held=held)
         return tracker.summary()
 
     start("costs", cost_step, 5, delay=15)
