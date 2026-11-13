@@ -252,6 +252,8 @@ def make_handler(state, events):
         def do_GET(self):
             if self.path in ("/", "/index.html"):
                 self._send(200, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
+            elif self.path in ("/wall", "/wall.html"):
+                self._send(200, (STATIC / "wall.html").read_bytes(), "text/html; charset=utf-8")
             elif self.path == "/log":
                 self._send(200, _log_page(events.recent()).encode(), "text/html; charset=utf-8")
             elif self.path == "/api/status":

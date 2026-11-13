@@ -8,7 +8,7 @@ Wants=network-online.target
 
 [Service]
 User=USER
-WorkingDirectory=/home/USER/HomeEnergy
+WorkingDirectory=/home/USER/homeenergy
 ExecStart=/usr/bin/python3 -m homeenergy
 Restart=always
 RestartSec=10

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Energy wall</title>
+<!-- A one-glance screen for an always-on phone or tablet: dark (kind to old screens and to the
+     eyes at night), huge traffic light, no scrolling. Tap anywhere for the full dashboard.
+     The same layout is what an e-ink screen would show. -->
+<style>
+  :root {
+    --bg: #000; --fg: #f2f2f2; --dim: #8a8a8a; --line: #222;
+    --green: #2ecc71; --amber: #f5a623; --red: #ff4d4d; --grey: #777;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  a { color: inherit; text-decoration: none; }
+  #wrap { height: 100dvh; display: grid; gap: 2.2vmin; padding: 3vmin;
+    grid-template-rows: auto 1fr auto auto; transition: transform 2s; }
+  #top { display: flex; justify-content: space-between; align-items: baseline; color: var(--dim);
+    font-size: 4vmin; }
+  #clock { font-size: 6vmin; color: var(--fg); font-variant-numeric: tabular-nums; }
+  #light { border-radius: 4vmin; padding: 4vmin; display: flex; flex-direction: column;
+    justify-content: center; border: 1.2vmin solid var(--grey); }
+  #light .dot { width: 14vmin; height: 14vmin; border-radius: 50%; background: var(--grey);
+    margin-bottom: 2vmin; }
+  #title { font-size: 13vmin; font-weight: 700; line-height: 1.05; }
+  #detail { font-size: 6vmin; margin-top: 1.5vmin; color: var(--fg); opacity: .85; }
+  #next { font-size: 5vmin; margin-top: 3vmin; color: var(--dim); }
+  .green { border-color: var(--green) !important; } .green .dot { background: var(--green) !important; }
+  .amber { border-color: var(--amber) !important; } .amber .dot { background: var(--amber) !important; }
+  .red   { border-color: var(--red)   !important; } .red   .dot { background: var(--red)   !important; }
+  #tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.2vmin; }
+  .tile { border: 1px solid var(--line); border-radius: 3vmin; padding: 2.5vmin; text-align: center; }
+  .tile .v { font-size: 10vmin; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+  .tile .u { font-size: 5vmin; font-weight: 400; color: var(--dim); }
+  .tile .l { font-size: 3.6vmin; color: var(--dim); margin-top: 1vmin; }
+  #money { display: flex; justify-content: space-around; font-size: 4.6vmin; color: var(--dim);
+    border-top: 1px solid var(--line); padding-top: 2vmin; }
+  #money b { color: var(--fg); font-size: 6vmin; }
+  #money .saved b { color: var(--green); }
+  #alert { display: none; background: var(--red); color: #000; font-weight: 700; border-radius: 2vmin;
+    padding: 1.5vmin 3vmin; font-size: 4vmin; }
+  .stale #light, .stale #tiles { opacity: .35; }
+  /* Landscape (tablet or phone on its side): light on the left, numbers on the right */
+  @media (orientation: landscape) {
+    #wrap { grid-template-columns: 1.15fr 1fr; grid-template-rows: auto 1fr auto; }
+    #top { grid-column: 1 / -1; }
+    #light { grid-row: 2 / 4; }
+    #tiles { grid-template-columns: 1fr; grid-template-rows: repeat(3, 1fr); }
+    #money { justify-content: space-between; font-size: 4vmin; padding-top: 1.5vmin; }
+    #money b { font-size: 5.5vmin; }
+    .tile { padding: 1.5vmin; display: flex; align-items: center; justify-content: space-between; text-align: left; }
+    .tile .l { margin-top: 0; }
+    #title { font-size: 9vmin; } #detail { font-size: 4.6vmin; } #next { font-size: 4vmin; }
+    #light .dot { width: 9vmin; height: 9vmin; }
+  }
+</style>
+</head>
+<body>
+<a href="/" id="wrap" title="Tap for the full dashboard">
+  <div id="top"><span id="clock">--:--</span><span id="status">connecting…</span></div>
+  <div id="light">
+    <div class="dot"></div>
+    <div id="title">Starting up…</div>
+    <div id="detail"></div>
+    <div id="next"></div>
+    <div id="alert"></div>
+  </div>
+  <div id="tiles">
+    <div class="tile"><div class="v" id="batt">--</div><div class="l">battery</div></div>
+    <div class="tile"><div class="v" id="sun">--</div><div class="l">sun now</div></div>
+    <div class="tile"><div class="v" id="grid">--</div><div class="l" id="gridl">from the grid</div></div>
+  </div>
+  <div id="money">
+    <span>Today <b id="spent">--</b></span>
+    <span class="saved">Saved <b id="saved">--</b></span>
+  </div>
+</a>
+<script>
+const $ = id => document.getElementById(id);
+const money = p => p == null ? "--" : (Math.abs(p) >= 100 ? "£" + (p / 100).toFixed(2) : Math.round(p) + "p");
+const kw = w => (w / 1000).toFixed(1);
+let lastOk = 0;
+
+function clock() {
+  $("clock").textContent = new Date().toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"});
+  const age = (Date.now() - lastOk) / 1000;
+  document.body.classList.toggle("stale", !lastOk || age > 90);
+  if (lastOk && age > 90) $("status").textContent = "no update for " + Math.round(age / 60) + " min";
+}
+
+async function refresh() {
+  try {
+    const r = await fetch("/api/status", {cache: "no-store"});
+    const d = await r.json();
+    const a = d.advice || {}, inv = d.latest, cheap = d.cheap || {};
+    const light = $("light");
+    light.className = a.colour || "grey";
+    $("title").textContent = a.title || "";
+    $("detail").textContent = a.detail || "";
+    $("next").textContent = a.next || "";
+    const alerts = d.alerts || [];
+    $("alert").style.display = alerts.length ? "block" : "none";
+    $("alert").textContent = alerts.length ? "⚠ " + (alerts[0].text || alerts[0].message || alerts[0]) +
+      (alerts.length > 1 ? ` (+${alerts.length - 1} more)` : "") : "";
+    if (inv) {
+      $("batt").innerHTML = inv.battery_pct + '<span class="u">%</span>';
+      $("sun").innerHTML = kw(inv.solar_w) + '<span class="u">kW</span>';
+      const g = inv.grid_w;
+      if (g > 50) {
+        $("grid").innerHTML = kw(g) + '<span class="u">kW</span>';
+        const perHour = cheap.price_p ? g / 1000 * cheap.price_p : null;
+        $("gridl").textContent = perHour != null ? `grid · ${money(perHour)}/hr` : "from the grid";
+      } else {
+        $("grid").innerHTML = "0" + '<span class="u">kW</span>';
+        $("gridl").textContent = "grid · free right now";
+      }
+    }
+    const t = (d.costs || {}).today;
+    $("spent").textContent = t ? money(t.spent_p) : "--";
+    $("saved").textContent = t ? money(t.saved_p) : "--";
+    lastOk = Date.now();
+    $("status").textContent = cheap.now ? "cheap rate" : (cheap.price_p ? cheap.price_p + "p a unit" : "");
+  } catch (e) {
+    $("status").textContent = "can't reach the Pi";
+  }
+  clock();
+}
+
+// Nudge everything by a few pixels every few minutes so an old screen doesn't burn in
+let n = 0;
+setInterval(() => {
+  n++;
+  const x = [0, 4, 0, -4][n % 4], y = [0, 3, -3, 0][(n >> 2) % 4];
+  $("wrap").style.transform = `translate(${x}px, ${y}px)`;
+}, 180000);
+
+// Keep the screen on where the browser allows it (needs https on most phones; otherwise
+// use the phone's own "stay awake while charging" setting)
+async function wake() { try { await navigator.wakeLock.request("screen"); } catch (e) {} }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { wake(); refresh(); } });
+wake();
+
+refresh();
+setInterval(refresh, 10000);
+setInterval(clock, 15000);
+</script>
+</body>
+</html>
