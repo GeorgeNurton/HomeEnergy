@@ -16,7 +16,7 @@ from .solar import sunny_window
 SUNNY_W = 1500            # roughly a dishwasher or washing machine heating
 BATTERY_OK_PCT = 50
 BATTERY_FULLISH_PCT = 90
-BATTERY_KWH = 8.2
+DEFAULT_BATTERY_KWH = 8.0   # only if neither config nor inverter says
 HOUSE_BASE_KW = 0.4       # rough background use while the sun's up
 
 
@@ -82,7 +82,7 @@ def advise(snap, now=None):
         if k.startswith(local.date().isoformat()) and int(k[11:13]) > local.hour and w > 0:
             remaining_kwh += w / 1000
             sun_hours += 1
-    space_kwh = BATTERY_KWH * (100 - inv["battery_pct"]) / 100
+    space_kwh = (snap.get("battery_kwh") or DEFAULT_BATTERY_KWH) * (100 - inv["battery_pct"]) / 100
     will_fill = remaining_kwh - HOUSE_BASE_KW * sun_hours > space_kwh + 1.0
     sunny = inv["solar_w"] >= SUNNY_W and inv.get("grid_w", 0) <= 100 and         (inv["battery_pct"] >= BATTERY_FULLISH_PCT or will_fill)
     if cheap.get("now"):

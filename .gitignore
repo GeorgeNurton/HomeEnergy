@@ -3,3 +3,4 @@ __pycache__/
 secrets.toml
 logs/
 data/
+config.toml

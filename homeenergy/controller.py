@@ -1,8 +1,8 @@
 """Battery control around Intelligent Octopus Go's extra (daytime) cheap slots.
 
 The rule:
-  - An "extra" car slot (one reaching outside the 23:30-05:30 night window) AND the Ohme says
-    the car is actually charging -> the whole house is on the cheap rate, so:
+  - An "extra" car slot (one reaching outside the night window) AND the car is actually charging
+    (from the Ohme, or the house load, see [car] in config.toml) -> the house is on the cheap rate:
       * HOLD: battery discharge limit (HR 112) 0%, so it doesn't drain into the car, and
       * CHARGE (if grid_charge is on): charge slot 1 (HR 94/95) borrowed from now to the slot's
         end, so the battery fills from the grid at the cheap rate. (This inverter has no usable
@@ -44,7 +44,7 @@ def decide(snap, now=None):
     now = now or datetime.now(timezone.utc)
     now_s = now.timestamp()
     inv = snap.get("latest")
-    ohme = snap.get("ohme")
+    car = snap.get("car") or {}
     planned = (snap.get("dispatches") or {}).get("planned") or []
 
     if not inv or now_s - inv["time"] > STALE_S:
@@ -54,12 +54,12 @@ def decide(snap, now=None):
         return "normal", "no car slot now", None
     if not slot.get("extra"):
         return "normal", "night slot - the inverter's own night charge covers it", None
-    if not ohme or now_s - ohme["time"] > STALE_S:
-        return "normal", "extra slot, but no fresh Ohme reading", None
-    if not ohme.get("charging"):
+    if car.get("charging") is None:
+        return "normal", f"extra slot, but can't tell if the car is charging ({car.get('how', 'no data')})", None
+    if not car["charging"]:
         return "normal", "extra slot, car not charging yet", None
     end = _t(slot["end"])
-    return "hold", f"extra slot until {end.astimezone():%H:%M} and car charging", end
+    return "hold", f"extra slot until {end.astimezone():%H:%M} and car charging ({car['how']})", end
 
 
 class Controller:

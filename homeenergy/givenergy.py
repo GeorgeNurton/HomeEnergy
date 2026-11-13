@@ -1,6 +1,6 @@
 """Talk to a GivEnergy inverter directly through its WiFi dongle (TCP port 8899).
 
-No cloud involved. This module only READS for now.
+No cloud involved. Writes are limited to the WRITABLE list and always read back.
 
 Wire format (GivEnergy's wrapper around Modbus):
   header : 0x5959, 0x0001, length(2)        - length counts everything after it
@@ -38,6 +38,17 @@ def _request(func: int, base: int, count: int) -> bytes:
 
 def _s16(v: int) -> int:
     return v - 0x10000 if v & 0x8000 else v
+
+
+# First hex digit of holding register 0 (the "device type code"), as used by the GivEnergy
+# community tools. Only AC-coupled (3xxx) has been tested with the battery control.
+MODELS = {"2": "Hybrid", "3": "AC-coupled", "4": "Hybrid 3-phase", "5": "EMS", "6": "AC 3-phase",
+          "7": "Gateway", "8": "All-in-One"}
+TESTED_MODELS = {"AC-coupled"}
+
+
+def model_name(code):
+    return MODELS.get(f"{code:04x}"[0], "unknown")
 
 
 class Inverter:
@@ -200,6 +211,10 @@ class Inverter:
                 "slot1_start": hr[94],        # hhmm as a number, e.g. 2330
                 "slot1_end": hr[95],
             },
+            "model": model_name(hr[0]),
+            "device_code": f"{hr[0]:04x}",
+            "firmware": hr[21],
+            "battery_ah": hr[55],          # e.g. 160 Ah = 8.2 kWh at 51.2 V
             "inverter_serial": text(13, 18),
             "battery_serial": text(8, 13),
             "inverter_clock": "20%02d-%02d-%02d %02d:%02d" % tuple(hr[r] for r in range(35, 40)),
@@ -210,4 +225,4 @@ if __name__ == "__main__":
     import json
     import sys
 
-    print(json.dumps(Inverter(sys.argv[1] if len(sys.argv) > 1 else "192.168.1.65").status(), indent=2))
+    print(json.dumps(Inverter(sys.argv[1]).status(), indent=2))

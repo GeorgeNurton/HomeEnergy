@@ -72,8 +72,11 @@ class State:
     """Latest reading from each source plus a day of one-minute inverter history,
     held in memory only (keeps the SD card from being written to all day)."""
 
-    def __init__(self):
+    def __init__(self, car_check="ohme", car_min_w=1400, battery_kwh=0):
         self.lock = threading.Lock()
+        self.car_check = car_check    # how to tell the car is charging: ohme / load / slot
+        self.car_min_w = car_min_w
+        self.battery_kwh = battery_kwh  # 0 = work it out from the inverter
         self.data = {}      # source -> latest result
         self.errors = {}    # source -> last error text (cleared on success)
         self.error_since = {}  # source -> when it started failing
@@ -131,12 +134,11 @@ class State:
                     dict(p, extra=not any(f <= _z(p["start"]) and _z(p["end"]) <= (t or "9999")
                                           for f, t in nights))
                     for p in planned or []])
+            car = self._car(d)
             if why == "smart charge slot":
                 # A daytime slot only gives the house the cheap rate once the car is actually
-                # charging, so check the Ohme too (and don't trust a stale Ohme reading).
-                ohme = d.get("ohme") or {}
-                fresh = time.time() - ohme.get("time", 0) < 120
-                if fresh and ohme.get("charging"):
+                # charging, so check that too.
+                if car["charging"]:
                     why = "smart slot, car charging"
                 else:
                     cheap, why = False, "smart slot, car not charging yet"
@@ -148,6 +150,8 @@ class State:
                 "dispatches": dispatches,
                 "extras": extra_times(planned, octo_rates),
                 "ohme": d.get("ohme"),
+                "car": car,
+                "battery_kwh": self._battery_kwh(d.get("inverter")),
                 "control": d.get("control"),
                 "cheap": {"now": cheap, "price_p": price, "why": why} if octo_rates is not None else None,
                 "errors": dict(self.errors),
@@ -157,6 +161,28 @@ class State:
                 "costs": d.get("costs"),
                 "solar_forecast": d.get("solar_forecast"),
             }
+
+    def _car(self, d):
+        """Is the car charging right now? charging = True / False / None (can't tell)."""
+        now = time.time()
+        if self.car_check == "slot":   # trust Octopus: a slot means the car has been told to charge
+            return {"charging": True, "how": "trusting the Octopus slot"}
+        if self.car_check == "load":   # the charger shows up in the house load
+            inv = d.get("inverter")
+            if not inv or now - inv["time"] > 120:
+                return {"charging": None, "how": "no fresh inverter reading"}
+            return {"charging": inv["house_w"] >= self.car_min_w,
+                    "how": f"house using {inv['house_w'] / 1000:.1f} kW"}
+        ohme = d.get("ohme")
+        if not ohme or now - ohme["time"] > 120:
+            return {"charging": None, "how": "no fresh Ohme reading"}
+        return {"charging": bool(ohme.get("charging")), "how": "Ohme"}
+
+    def _battery_kwh(self, inv):
+        if self.battery_kwh:
+            return self.battery_kwh
+        ah = (inv or {}).get("battery_ah")
+        return round(ah * 51.2 / 1000, 1) if ah else None   # GivEnergy batteries run at 51.2 V
 
 
 def extra_times(planned, rates):
@@ -278,10 +304,21 @@ def _filled(section, *keys):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    cfg = tomllib.loads((ROOT / "config.toml").read_text())
+    cfg_file = ROOT / "config.toml"
+    if not cfg_file.exists():
+        raise SystemExit("No config.toml yet: copy config.example.toml to config.toml and fill it in "
+                         "(or run deploy/install.sh on the Pi).")
+    cfg = tomllib.loads(cfg_file.read_text())
     secrets_file = ROOT / "secrets.toml"
     secrets = tomllib.loads(secrets_file.read_text()) if secrets_file.exists() else {}
-    state = State()
+    oh = secrets.get("ohme")
+    have_ohme = _filled(oh, "email", "password")
+    car_cfg = cfg.get("car", {})
+    car_check = car_cfg.get("charging_check", "auto")
+    if car_check == "auto":
+        car_check = "ohme" if have_ohme else "load"
+    state = State(car_check=car_check, car_min_w=car_cfg.get("min_w", 1400),
+                  battery_kwh=cfg.get("house", {}).get("battery_kwh", 0))
     events = EventLog(ROOT / "logs" / "events.jsonl")
     events.add("start", "HomeEnergy started")
 
@@ -299,8 +336,7 @@ def main():
     else:
         log.info("Octopus not configured (secrets.toml) - skipping")
 
-    oh = secrets.get("ohme")
-    if _filled(oh, "email", "password"):
+    if have_ohme:
         start("ohme", Ohme(oh["email"], oh["password"]).status, 30)
     else:
         log.info("Ohme not configured (secrets.toml) - skipping")
@@ -322,8 +358,9 @@ def main():
 
     ctrl = Controller(inverter, live=ctl_cfg.get("live", False), grid_charge=ctl_cfg.get("grid_charge", False),
                       night_slot=(int(night[0]), int(night[1])), on_event=on_event)
-    events.add("start", "battery control %s, grid charging in extra slots %s, night slot %s" % (
-        "LIVE" if ctrl.live else "dry run", "on" if ctrl.grid_charge else "off", night_cfg))
+    events.add("start", "battery control %s, grid charging in extra slots %s, night slot %s, "
+               "car charging check: %s" % ("LIVE" if ctrl.live else "dry run (watch only)",
+                                           "on" if ctrl.grid_charge else "off", night_cfg, car_check))
 
     def control_step():
         result = ctrl.step(state.snapshot())

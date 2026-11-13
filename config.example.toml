@@ -1,0 +1,55 @@
+# HomeEnergy settings. Copy this file to config.toml and fill it in (deploy/install.sh does the copy).
+# Keys and passwords go in secrets.toml (copy secrets.example.toml), which is never put on GitHub.
+
+[givenergy]
+# The GivEnergy WiFi dongle's address on your home network. Find it in the router's device list
+# (often named after the dongle serial, e.g. WF2136G384) and set the router to always give it
+# the same address.
+host = "192.168.1.XX"
+poll_seconds = 10
+
+[web]
+port = 80               # phone address is then just http://<pi address>  (use 8080 when testing on a PC)
+
+[house]
+# Battery size in kWh. 0 = work it out from what the inverter reports (Ah x 51.2 V).
+battery_kwh = 0
+
+[control]
+# START WITH live = false: the program then only logs what it WOULD do (watch it on the /log page
+# for a day or two). true = it pauses battery discharge during extra car slots.
+live = false
+# true = also charge the battery from the grid during extra car slots, by borrowing charge slot 1
+# and putting it back to night_slot afterwards.
+grid_charge = false
+# Your inverter's normal overnight timed charge (hhmm-hhmm). While live, the program keeps charge
+# slot 1 at this, so change it here, not in a phone app. Intelligent Octopus Go: 2330-0530.
+night_slot = "2330-0530"
+
+[car]
+# How to tell the car is actually charging during an extra slot (on Go Max-style tariffs the house
+# only gets the cheap rate once it is):
+#   "auto" - the Ohme if its login is in secrets.toml, otherwise "load"
+#   "ohme" - ask the Ohme charger
+#   "load" - the house is using at least min_w (the charger is part of the house load)
+#   "slot" - trust Octopus: a planned slot means the car has been told to charge
+charging_check = "auto"
+min_w = 1400            # a charger at its lowest (6 A) uses ~1.4 kW
+
+[costs]
+# Daily standing charge in pence (on your bill or the Octopus app)
+standing_charge_p = 0.0
+# What you're paid per kWh exported (0 if you have no export tariff)
+export_p = 0.0
+
+[solar]
+# Solar forecast from forecast.solar (free, no account). Leave kwp = 0 to switch it off.
+# Use your postcode DISTRICT's rough position (2 decimal places), not your exact address.
+lat = 0.0
+lon = 0.0
+kwp = 0            # panel size in kW peak
+tilt = 35          # degrees from flat; a typical UK roof is 35-40
+azimuth = 0        # 0 = south, -90 = east, 90 = west (e.g. facing 160 deg = -20)
+# Hours of partial shade early and late: the forecast is halved before/after these hours
+shade_before = 7
+shade_after = 18

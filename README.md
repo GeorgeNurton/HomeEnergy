@@ -1,9 +1,9 @@
 # HomeEnergy
 
-A Raspberry Pi Zero 2 W that watches the house's electricity and (soon) steers the
-GivEnergy battery around Intelligent Octopus Go's cheap slots.
+A Raspberry Pi Zero 2 W that watches the house's electricity and steers the GivEnergy battery
+around Intelligent Octopus Go's cheap slots. **Setting it up in another house: see [SETUP.md](SETUP.md).**
 
-## The kit
+## The kit (the original house)
 - GivEnergy AC-coupled inverter (CE2146G206) + Giv-Bat 8.2 (8.2 kWh), WiFi dongle at `192.168.1.65`
 - Separate solar inverter, Marlec iBoost (left alone)
 - Ohme Home Pro (Citroen eC3), granny charger (Mitsubishi PHEV)
@@ -12,14 +12,16 @@ GivEnergy battery around Intelligent Octopus Go's cheap slots.
 ## How it works
 - Talks to the inverter **directly over WiFi** (dongle port 8899, GivEnergy's Modbus wrapper). No cloud.
 - Polls every 10 s, keeps 24 h of one-minute history in memory (nothing written to the SD card).
-- Serves a phone dashboard: `http://energy.local` on the Pi, `http://localhost:8080` when testing on a PC.
+- Serves a phone dashboard (`/`), a wall display (`/wall`) and an event log (`/log`).
 - Python standard library only; nothing to install.
 
 ## Run it
 ```
-python -m homeenergy
+python -m homeenergy           # the dashboard and battery control
+python -m homeenergy.check     # read-only check-up of the inverter, Octopus, Ohme and forecast
 ```
-Settings live in `config.toml`. API keys (Octopus, Ohme) will go in `secrets.toml`, which git ignores.
+Settings live in `config.toml` (from `config.example.toml`), keys in `secrets.toml` (from
+`secrets.example.toml`). Neither is put on GitHub.
 
 ## Plan
 1. ✅ Read-only dashboard (inverter)
@@ -35,7 +37,9 @@ Settings live in `config.toml`. API keys (Octopus, Ohme) will go in `secrets.tom
      23:30-05:30 and discharge rate to 50% in the phone app.
 4. ✅ Event log (`logs/events.jsonl`, page at `/log`) and red alert banner on the dashboard for
    refused/failed inverter changes and any source failing for 5+ minutes.
-5. Extras: small screen, PHEV smart plug, supply-current limit (100 A main fuse)
+5. ✅ Wall display for an always-on phone (`/wall`)
+6. ✅ Shareable: settings template, check-up script, Ohme optional ([SETUP.md](SETUP.md))
+7. Extras: e-ink screen, PHEV smart plug, supply-current limit (100 A main fuse)
 
 ## Register notes (checked against the real inverter, Nov 2026)
 | Reg | Meaning |

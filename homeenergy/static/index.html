@@ -123,7 +123,7 @@
   </div>
 
   <div class="card" id="car-card" style="display:none">
-    <div class="label">Car charger (Ohme)</div>
+    <div class="label">Car charger</div>
     <div class="row2"><span class="big" id="car">–</span><span class="sub" id="car-pct"></span></div>
   </div>
 
@@ -288,7 +288,7 @@ function control(d) {
     .map(e => `<div><span>${t(e.time)} ${e.done}</span><span>${e.battery_pct ?? "–"}%</span></div>`).join("");
 }
 
-const hm = iso => new Date(iso).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+const hm = iso => new Date(iso).toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"});
 const day = iso => {
   const t = new Date(iso), today = new Date();
   return t.toDateString() === today.toDateString() ? "" : t.toLocaleDateString([], {weekday: "short"}) + " ";
@@ -306,7 +306,8 @@ function tariff(d) {
   const now = Date.now();
   const extras = (d.extras || []).filter(p => new Date(p.end) > now);
   const night = d.rates && d.rates.rates && d.rates.rates.length ? d.rates.rates.reduce((a, r) => r.p < a.p ? r : a) : null;
-  let html = `<div class="night">🌙 <b>Cheap every night 23:30–05:30</b>${night ? ` · ${night.p}p` : ""}</div>`;
+  const nightTimes = night && night.to ? ` ${hm(night.from)}–${hm(night.to)}` : "";
+  let html = `<div class="night">🌙 <b>Cheap every night${nightTimes}</b>${night ? ` · ${night.p}p` : ""}</div>`;
   html += extras.length
     ? "<b>Extra cheap times</b> <span class='sub'>(only while the car is charging)</span>" +
       extras.map(p => `<div><span>${day(p.start)}${hm(p.start)}–${hm(p.end)}</span></div>`).join("")
