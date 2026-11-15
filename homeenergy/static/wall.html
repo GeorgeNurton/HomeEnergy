@@ -45,8 +45,22 @@
   #alert { display: none; background: var(--red); color: #000; font-weight: 700; border-radius: 2vmin;
     padding: 1.5vmin 3vmin; font-size: 4vmin; }
   .stale #light, .stale #tiles { opacity: .35; }
+  #sunf { display: none; grid-template-columns: 1fr 1fr; gap: 4vmin; border: 1px solid var(--line);
+    border-radius: 3vmin; padding: 2.5vmin 3vmin; min-height: 0; }
+  .sd { display: flex; flex-direction: column; min-height: 0; }
+  .sd .h { font-size: 4.4vmin; color: var(--dim); }
+  .sd .h b { display: block; color: var(--fg); font-size: 7vmin; }
+  .bars { flex: 1; display: flex; align-items: flex-end; gap: .8vmin; margin-top: 1.5vmin;
+    min-height: 12vmin; border-bottom: 1px solid var(--line); }
+  .bars div { flex: 1; background: var(--amber); border-radius: .6vmin .6vmin 0 0; min-height: 2px; }
+  .bars div.past { opacity: .3; }
+  .bars div.now { background: var(--fg); }
+  .hl { display: flex; justify-content: space-between; font-size: 3.4vmin; color: var(--dim);
+    margin-top: .8vmin; }
   /* Portrait: one number per row, so they can be big */
   @media (orientation: portrait) {
+    #wrap { grid-template-rows: auto auto 1fr auto auto; }
+    #sunf.on { display: grid; }
     #tiles { grid-template-columns: 1fr; }
     .tile { display: flex; align-items: center; justify-content: space-between; text-align: left;
       padding: 1.5vmin 4vmin; }
@@ -78,6 +92,7 @@
     <div id="next"></div>
     <div id="alert"></div>
   </div>
+  <div id="sunf"></div>
   <div id="tiles">
     <div class="tile"><div class="v" id="batt">--</div><div class="l">battery</div></div>
     <div class="tile"><div class="v" id="sun">--</div><div class="l">sun now</div></div>
@@ -101,6 +116,29 @@ function clock() {
   const age = (Date.now() - lastOk) / 1000;
   document.body.classList.toggle("stale", !lastOk || age > 90);
   if (lastOk && age > 90) $("status").textContent = "no update for " + Math.round(age / 60) + " min";
+}
+
+function sunForecast(f) {
+  if (!f || !f.days) return;
+  const now = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  const key = dt => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+  const today = key(now), tom = key(new Date(now.getTime() + 864e5));
+  // A fixed-ish scale so a dull day looks dull, not stretched to fill the box
+  const top = Math.max(...Object.values(f.hours), 2000);
+  const days = [[today, "Today"], [tom, "Tomorrow"]].filter(([k]) => f.days[k] != null);
+  if (!days.length) return;
+  $("sunf").innerHTML = days.map(([k, name]) => {
+    let bars = "";
+    for (let h = 7; h <= 17; h++) {
+      const w = f.hours[`${k} ${pad(h)}:00`] || 0;
+      const cls = k !== today ? "" : h < now.getHours() ? "past" : h === now.getHours() ? "now" : "";
+      bars += `<div class="${cls}" style="height:${(100 * w / top).toFixed(0)}%"></div>`;
+    }
+    return `<div class="sd"><div class="h">☀ ${name}<b>${f.days[k]} kWh</b></div>` +
+      `<div class="bars">${bars}</div><div class="hl"><span>07</span><span>12</span><span>17</span></div></div>`;
+  }).join("");
+  $("sunf").classList.add("on");
 }
 
 async function refresh() {
@@ -139,6 +177,7 @@ async function refresh() {
     const t = (d.costs || {}).today;
     $("spent").textContent = t ? money(t.spent_p) : "--";
     $("saved").textContent = t ? money(t.saved_p) : "--";
+    sunForecast(d.solar_forecast);
     lastOk = Date.now();
     $("status").textContent = cheap.now ? "cheap rate" : (cheap.price_p ? cheap.price_p + "p a unit" : "");
   } catch (e) {
