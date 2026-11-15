@@ -27,24 +27,31 @@
     justify-content: center; border: 1.2vmin solid var(--grey); }
   #light .dot { width: 14vmin; height: 14vmin; border-radius: 50%; background: var(--grey);
     margin-bottom: 2vmin; }
-  #title { font-size: 13vmin; font-weight: 700; line-height: 1.05; }
-  #detail { font-size: 6vmin; margin-top: 1.5vmin; color: var(--fg); opacity: .85; }
+  #title { font-size: 22vmin; font-weight: 800; line-height: 1; letter-spacing: .02em; }
+  #detail { font-size: 6.5vmin; margin-top: 1.5vmin; color: var(--fg); opacity: .85; }
   #next { font-size: 5vmin; margin-top: 3vmin; color: var(--dim); }
   .green { border-color: var(--green) !important; } .green .dot { background: var(--green) !important; }
   .amber { border-color: var(--amber) !important; } .amber .dot { background: var(--amber) !important; }
   .red   { border-color: var(--red)   !important; } .red   .dot { background: var(--red)   !important; }
   #tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.2vmin; }
-  .tile { border: 1px solid var(--line); border-radius: 3vmin; padding: 2.5vmin; text-align: center; }
-  .tile .v { font-size: 10vmin; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
-  .tile .u { font-size: 5vmin; font-weight: 400; color: var(--dim); }
-  .tile .l { font-size: 3.6vmin; color: var(--dim); margin-top: 1vmin; }
-  #money { display: flex; justify-content: space-around; font-size: 4.6vmin; color: var(--dim);
+  .tile { border: 1px solid var(--line); border-radius: 3vmin; padding: 2vmin 1vmin; text-align: center; }
+  .tile .v { font-size: 13vmin; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+  .tile .u { font-size: 5.5vmin; font-weight: 400; color: var(--dim); }
+  .tile .l { font-size: 4.4vmin; color: var(--dim); margin-top: 1vmin; }
+  #money { display: flex; justify-content: space-around; font-size: 5vmin; color: var(--dim);
     border-top: 1px solid var(--line); padding-top: 2vmin; }
-  #money b { color: var(--fg); font-size: 6vmin; }
+  #money b { color: var(--fg); font-size: 7.5vmin; }
   #money .saved b { color: var(--green); }
   #alert { display: none; background: var(--red); color: #000; font-weight: 700; border-radius: 2vmin;
     padding: 1.5vmin 3vmin; font-size: 4vmin; }
   .stale #light, .stale #tiles { opacity: .35; }
+  /* Portrait: one number per row, so they can be big */
+  @media (orientation: portrait) {
+    #tiles { grid-template-columns: 1fr; }
+    .tile { display: flex; align-items: center; justify-content: space-between; text-align: left;
+      padding: 1.5vmin 4vmin; }
+    .tile .v { font-size: 18vmin; } .tile .u { font-size: 7vmin; } .tile .l { font-size: 5.5vmin; margin-top: 0; }
+  }
   /* Landscape (tablet or phone on its side): light on the left, numbers on the right */
   @media (orientation: landscape) {
     #wrap { grid-template-columns: 1.15fr 1fr; grid-template-rows: auto 1fr auto; }
@@ -52,10 +59,11 @@
     #light { grid-row: 2 / 4; }
     #tiles { grid-template-columns: 1fr; grid-template-rows: repeat(3, 1fr); }
     #money { justify-content: space-between; font-size: 4vmin; padding-top: 1.5vmin; }
-    #money b { font-size: 5.5vmin; }
+    #money b { font-size: 6.5vmin; }
     .tile { padding: 1.5vmin; display: flex; align-items: center; justify-content: space-between; text-align: left; }
     .tile .l { margin-top: 0; }
-    #title { font-size: 9vmin; } #detail { font-size: 4.6vmin; } #next { font-size: 4vmin; }
+    #title { font-size: 20vmin; } #detail { font-size: 5vmin; } #next { font-size: 4vmin; }
+    .tile .v { font-size: 12vmin; } .tile .l { font-size: 4.4vmin; }
     #light .dot { width: 9vmin; height: 9vmin; }
   }
 </style>
