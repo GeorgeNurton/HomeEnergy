@@ -108,7 +108,8 @@ const $ = id => document.getElementById(id);
 const money = p => p == null ? "--" : (Math.abs(p) >= 100 ? "£" + (p / 100).toFixed(2) : Math.round(p) + "p");
 const kw = w => (w / 1000).toFixed(1);
 let lastOk = 0;
-let skew = 0;   // Pi's clock minus this phone's: old phones often have the wrong time
+let skew = 0;
+let pageVersion = 0;   // Pi's clock minus this phone's: old phones often have the wrong time
 
 
 function clock() {
@@ -149,6 +150,11 @@ async function refresh() {
     const r = await fetch("/api/status", {cache: "no-store", signal: ctl.signal});
     clearTimeout(timer);
     const d = await r.json();
+    // A new version of this page on the Pi? Load it.
+    if (d.page_version) {
+      if (pageVersion && d.page_version !== pageVersion) location.reload();
+      pageVersion = d.page_version;
+    }
     const piNow = Date.parse(r.headers.get("Date") || "");
     if (piNow) skew = piNow - Date.now();
     const a = d.advice || {}, inv = d.latest, cheap = d.cheap || {};

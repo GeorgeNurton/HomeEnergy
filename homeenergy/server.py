@@ -284,6 +284,8 @@ def make_handler(state, events):
                 self._send(200, _log_page(events.recent()).encode(), "text/html; charset=utf-8")
             elif self.path == "/api/status":
                 snap = state.snapshot()
+                # Changes when a page is updated, so an always-on display can reload itself
+                snap["page_version"] = int(max(p.stat().st_mtime for p in STATIC.glob("*.html")))
                 try:
                     snap["advice"] = advise(snap)
                 except Exception as e:  # never let the advice break the dashboard
