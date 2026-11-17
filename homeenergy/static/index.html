@@ -58,6 +58,10 @@
   .hours { display: flex; align-items: flex-end; gap: 2px; height: 54px; margin-top: 4px; }
   .hours div { flex: 1; background: var(--solar); border-radius: 2px 2px 0 0; min-height: 1px; opacity: .85; }
   .hours div.past { opacity: .3; }
+  #use-bars { position: relative; }
+  #use-bars > div { background: var(--house); position: relative; }
+  #use-bars > div.later { background: none; }
+  #use-bars i { position: absolute; left: -1px; right: -1px; border-top: 2px solid var(--text); opacity: .7; }
   .hlabels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
   .row2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .pill { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--line); color: var(--muted); }
@@ -157,6 +161,14 @@
     </div>
   </div>
 
+  <div class="card" id="use-card" style="display:none">
+    <div class="label">House use by the hour (without the car)</div>
+    <div id="use-sum" class="sub" style="margin:4px 0 6px"></div>
+    <div class="hours" id="use-bars" style="height:70px"></div>
+    <div class="hlabels"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+    <div class="sub" style="margin-top:4px">Bars: today. Line: a typical day.</div>
+  </div>
+
   <div class="card" id="bb-card" style="display:none">
     <div class="label">Bigger battery?</div>
     <div class="sub" style="margin:4px 0 8px">Why full-price power was bought today:</div>
@@ -219,6 +231,7 @@ function render(d) {
   advice(d.advice);
   money(d.costs);
   bigger(d.costs);
+  hourly((d.costs || {}).usage);
   sun(d.solar_forecast);
 }
 
@@ -251,6 +264,24 @@ function bigger(c) {
     `<div class="sub" style="margin-top:6px">A rough guide: scaled up from the days so far (winter days ` +
     `overstate a year, summer days understate it). Battery seen at up to ${kw(b.max_out_w)} out / ` +
     `${kw(b.max_in_w)} in.</div>`;
+}
+
+function hourly(u) {
+  if (!u) return;
+  $("use-card").style.display = "block";
+  const nowH = new Date().getHours();
+  const top = Math.max(...u.today, ...u.typical.map(x => x || 0), 0.5);
+  $("use-bars").innerHTML = u.today.map((v, h) => {
+    const t = u.typical[h];
+    const line = t != null ? `<i style="bottom:${(100 * t / top).toFixed(0)}%"></i>` : "";
+    return `<div class="${h > nowH ? "later" : ""}" style="height:100%;background:none">` +
+      `<div style="position:absolute;bottom:0;left:0;right:0;height:${(100 * v / top).toFixed(0)}%;` +
+      `background:var(--house);border-radius:2px 2px 0 0;${h === nowH ? "opacity:.6" : ""}"></div>${line}</div>`;
+  }).join("");
+  $("use-sum").textContent = `Today so far ${u.today_home_kwh} kWh` +
+    (u.today_car_kwh ? ` (+ ${u.today_car_kwh} kWh car)` : "") +
+    (u.typical_kwh != null ? ` · a typical ${u.basis === "all days" ? "day" : u.basis}: ${u.typical_kwh} kWh ` +
+      `(from ${u.days} day${u.days === 1 ? "" : "s"})` : " · the typical day appears after the first full day");
 }
 
 function sun(f) {

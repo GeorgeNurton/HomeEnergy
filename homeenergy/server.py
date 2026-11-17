@@ -16,6 +16,7 @@ from pathlib import Path
 from .advice import advise
 from .controller import Controller
 from .costs import CostTracker
+from .usage import UsageLog
 from .givenergy import Inverter
 from .octopus import Octopus, cheap_now
 from .ohme import Ohme
@@ -383,6 +384,7 @@ def main():
     cost_cfg = cfg.get("costs", {})
     tracker = CostTracker(ROOT / "data" / "daily.json", standing_p=cost_cfg.get("standing_charge_p", 0.0),
                           export_p=cost_cfg.get("export_p", 0.0))
+    usage = UsageLog(ROOT / "data" / "hourly.json")
     last_counted = [None]
 
     def cost_step():
@@ -392,7 +394,10 @@ def main():
             last_counted[0] = inv["time"]
             held = (snap.get("control") or {}).get("action") in ("hold", "charge")
             tracker.add(inv, (cheap or {}).get("price_p"), (cheap or {}).get("now", False), held=held)
-        return tracker.summary()
+            ohme = snap.get("ohme") or {}
+            car_w = ohme.get("power_w", 0) if ohme and time.time() - ohme.get("time", 0) < 120 else 0
+            usage.add(inv, car_w)
+        return {**tracker.summary(), "usage": usage.summary()}
 
     start("costs", cost_step, 5, delay=15)
 
@@ -400,6 +405,7 @@ def main():
     import signal
     import sys
     atexit.register(tracker.save)
+    atexit.register(usage.save)
     # A normal stop (systemd, Ctrl+C) saves the day's totals on the way out.
     signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
 
