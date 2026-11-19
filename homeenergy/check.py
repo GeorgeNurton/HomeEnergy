@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from .givenergy import TESTED_MODELS, Inverter
 from .octopus import Octopus
 from .ohme import Ohme
+from .shelly import ShellySwitch
 from .server import ROOT, _filled, extra_times
 from .solar import SolarForecast
 
@@ -145,6 +146,19 @@ def check_ohme(secrets, cfg):
         say("fail", f"Ohme login failed ({type(e).__name__}: {e})")
 
 
+def check_granny(cfg):
+    gc = cfg.get("granny_charger", {})
+    host = str(gc.get("host", "")).strip()
+    if not host:
+        return
+    try:
+        s = ShellySwitch(host, watts=gc.get("watts", 2100)).status()
+        say("ok", f"granny charger Shelly at {host}: {'on' if s['on'] else 'off'}" +
+            ("" if s["measured"] else f" (no power meter: counted as {gc.get('watts', 2100)} W when on)"))
+    except Exception as e:
+        say("fail", f"granny charger Shelly at {host} not answering ({type(e).__name__}: {e})")
+
+
 def check_solar(cfg):
     print("\n== Solar forecast ==")
     sol = cfg.get("solar") or {}
@@ -170,6 +184,7 @@ def main():
     check_inverter(cfg)
     check_octopus(secrets)
     check_ohme(secrets, cfg)
+    check_granny(cfg)
     check_solar(cfg)
     ctl = cfg.get("control", {})
     print("\n== Summary ==")

@@ -20,6 +20,7 @@ from .usage import UsageLog
 from .givenergy import Inverter
 from .octopus import Octopus, cheap_now
 from .ohme import Ohme
+from .shelly import ShellySwitch
 from .solar import SolarForecast
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,7 +28,7 @@ STATIC = Path(__file__).resolve().parent / "static"
 log = logging.getLogger("homeenergy")
 ALERT_AFTER_S = 5 * 60   # a source failing for this long raises an alert
 SOURCE_NAMES = {"inverter": "Inverter", "rates": "Octopus prices", "dispatches": "Octopus slots",
-                "ohme": "Ohme charger", "control": "Battery control"}
+                "ohme": "Ohme charger", "granny": "Granny charger (Shelly)", "control": "Battery control"}
 
 
 class EventLog:
@@ -151,6 +152,7 @@ class State:
                 "dispatches": dispatches,
                 "extras": extra_times(planned, octo_rates),
                 "ohme": d.get("ohme"),
+                "granny": d.get("granny"),
                 "car": car,
                 "battery_kwh": self._battery_kwh(d.get("inverter")),
                 "control": d.get("control"),
@@ -344,6 +346,10 @@ def main():
     else:
         log.info("Ohme not configured (secrets.toml) - skipping")
 
+    gc = cfg.get("granny_charger", {})
+    if str(gc.get("host", "")).strip():
+        start("granny", ShellySwitch(gc["host"], watts=gc.get("watts", 2100)).status, 30)
+
     sol = cfg.get("solar")
     if sol and sol.get("kwp"):
         fc = SolarForecast(sol["lat"], sol["lon"], sol["tilt"], sol["azimuth"], sol["kwp"],
@@ -394,8 +400,10 @@ def main():
             last_counted[0] = inv["time"]
             held = (snap.get("control") or {}).get("action") in ("hold", "charge")
             tracker.add(inv, (cheap or {}).get("price_p"), (cheap or {}).get("now", False), held=held)
-            ohme = snap.get("ohme") or {}
-            car_w = ohme.get("power_w", 0) if ohme and time.time() - ohme.get("time", 0) < 120 else 0
+            car_w = 0
+            for c in (snap.get("ohme"), snap.get("granny")):     # every car charger we can see
+                if c and time.time() - c.get("time", 0) < 120:
+                    car_w += c.get("power_w") or 0
             usage.add(inv, car_w)
         return {**tracker.summary(), "usage": usage.summary()}
 

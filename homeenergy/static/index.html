@@ -131,6 +131,11 @@
     <div class="row2"><span class="big" id="car">–</span><span class="sub" id="car-pct"></span></div>
   </div>
 
+  <div class="card" id="granny-card" style="display:none">
+    <div class="label">Granny charger</div>
+    <div class="row2"><span class="big" id="granny">–</span><span class="sub" id="granny-sub"></span></div>
+  </div>
+
   <div class="card">
     <div class="label">Last 24 hours</div>
     <svg id="chart" viewBox="0 0 500 160" preserveAspectRatio="none"></svg>
@@ -227,6 +232,7 @@ function render(d) {
   chart(d.history);
   tariff(d);
   car(d);
+  granny(d);
   control(d);
   advice(d.advice);
   money(d.costs);
@@ -386,6 +392,23 @@ function tariff(d) {
   const errs = ["rates", "dispatches"].filter(k => d.errors[k]).map(k => `${k}: ${d.errors[k]}`);
   if (errs.length) html += `<div class="errs">${errs.join("<br>")}</div>`;
   $("slots").innerHTML = html;
+}
+
+function schedText(s) {
+  if (!s || !s.length) return "no timer set on the Shelly";
+  return "Shelly timer: " + s.map(([what, at]) => `${what} ${at}`).join(", ");
+}
+
+function granny(d) {
+  const g = d.granny, err = d.errors.granny;
+  if (!g && !err) return;
+  $("granny-card").style.display = "block";
+  if (!g || (err && Date.now() / 1000 - g.time > 120)) {
+    $("granny").textContent = "not answering"; $("granny-sub").textContent = err || ""; return;
+  }
+  $("granny").textContent = g.on ? "on" : "off";
+  $("granny-sub").textContent = g.on ? (g.measured ? kw(g.power_w) : `~${kw(g.power_w)} if the car is taking it`)
+    : schedText(g.schedule);
 }
 
 function car(d) {
