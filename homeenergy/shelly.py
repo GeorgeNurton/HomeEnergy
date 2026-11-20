@@ -1,8 +1,8 @@
 """A Shelly relay (Gen2 or later) on a second car charger, read over the home network.
 
 Uses the Shelly's own local web API: no cloud, no app, no login (unless a password has been set
-on the Shelly, which this doesn't support yet). Read-only for now: it reports whether the relay is
-on, and how much power is going through it. Shellys with a power meter (the "PM" models) measure
+on the Shelly, which this doesn't support yet). It reports whether the relay is on and how much
+power is going through it, and can switch it (see granny.py for when). Shellys with a power meter (the "PM" models) measure
 that; plain ones (e.g. Shelly 1 Gen4) don't, so "on" is taken to mean drawing the configured watts.
 
     python3 -m homeenergy.shelly 192.168.1.110
@@ -22,6 +22,16 @@ class ShellySwitch:
         url = f"http://{self.host}/rpc/{method}" + (f"?{q}" if q else "")
         with urllib.request.urlopen(url, timeout=5) as r:
             return json.load(r)
+
+    def set(self, on, toggle_after=None):
+        """Switch on/off. toggle_after = the Shelly flips it back by itself after that many seconds.
+        Returns when the Shelly says its timer started (its own clock), or now."""
+        params = {"id": self.id, "on": "true" if on else "false"}
+        if toggle_after:
+            params["toggle_after"] = int(toggle_after)
+        self._rpc("Switch.Set", **params)
+        s = self._rpc("Switch.GetStatus", id=self.id)
+        return s.get("timer_started_at") or time.time()
 
     def schedule(self):
         """The Shelly's own daily on/off times for this switch, e.g. [("on", "23:30"), ("off", "05:30")]."""
@@ -51,6 +61,8 @@ class ShellySwitch:
             "measured": measured is not None,
             "temp_c": (s.get("temperature") or {}).get("tC"),
             "schedule": sched,
+            "timer_started_at": s.get("timer_started_at"),     # its own "flip back after" timer
+            "timer_duration": s.get("timer_duration"),
         }
 
 

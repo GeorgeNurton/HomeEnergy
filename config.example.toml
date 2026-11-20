@@ -41,6 +41,12 @@ min_w = 1400            # a charger at its lowest (6 A) uses ~1.4 kW
 # the home network, no cloud. Leave host empty if you don't have one. Fix its address in the router.
 host = ""
 watts = 2100       # what the charger draws when on (used if the Shelly has no power meter)
+# Give the Shelly its own night timer (in its app or web page) for the night band. On top of that:
+#   cheap_slots = true   - also switch it on in Intelligent Octopus extra daytime slots while the
+#                          house is on the cheap rate (the Shelly switches itself off at the slot end)
+#   cheap_slots = "dry"  - only log what it would do
+#   cheap_slots = false  - leave it to the Shelly's own timer
+cheap_slots = false
 
 [costs]
 # Daily standing charge in pence (on your bill or the Octopus app)

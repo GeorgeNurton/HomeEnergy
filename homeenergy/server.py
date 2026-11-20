@@ -21,6 +21,7 @@ from .givenergy import Inverter
 from .octopus import Octopus, cheap_now
 from .ohme import Ohme
 from .shelly import ShellySwitch
+from .granny import GrannyControl
 from .solar import SolarForecast
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,7 +29,7 @@ STATIC = Path(__file__).resolve().parent / "static"
 log = logging.getLogger("homeenergy")
 ALERT_AFTER_S = 5 * 60   # a source failing for this long raises an alert
 SOURCE_NAMES = {"inverter": "Inverter", "rates": "Octopus prices", "dispatches": "Octopus slots",
-                "ohme": "Ohme charger", "granny": "Granny charger (Shelly)", "control": "Battery control"}
+                "ohme": "Ohme charger", "granny": "Granny charger (Shelly)", "granny_control": "Granny charger control", "control": "Battery control"}
 
 
 class EventLog:
@@ -153,6 +154,7 @@ class State:
                 "extras": extra_times(planned, octo_rates),
                 "ohme": d.get("ohme"),
                 "granny": d.get("granny"),
+                "granny_control": d.get("granny_control"),
                 "car": car,
                 "battery_kwh": self._battery_kwh(d.get("inverter")),
                 "control": d.get("control"),
@@ -347,8 +349,15 @@ def main():
         log.info("Ohme not configured (secrets.toml) - skipping")
 
     gc = cfg.get("granny_charger", {})
+    granny_ctl = None
     if str(gc.get("host", "")).strip():
-        start("granny", ShellySwitch(gc["host"], watts=gc.get("watts", 2100)).status, 30)
+        shelly = ShellySwitch(gc["host"], watts=gc.get("watts", 2100))
+        start("granny", shelly.status, 30)
+        mode = gc.get("cheap_slots", False)       # true = switch it in extra slots, "dry" = just log
+        if mode:
+            granny_ctl = GrannyControl(shelly, live=mode is True,
+                                       on_event=lambda text, level="info": events.add("granny", text, level=level))
+            log.info("granny charger in extra slots: %s", "LIVE" if mode is True else "dry run")
 
     sol = cfg.get("solar")
     if sol and sol.get("kwp"):
@@ -386,6 +395,8 @@ def main():
         return result
 
     start("control", control_step, 30, delay=20)  # let the first readings arrive
+    if granny_ctl:
+        start("granny_control", lambda: granny_ctl.step(state.snapshot()), 30, delay=40)
 
     cost_cfg = cfg.get("costs", {})
     tracker = CostTracker(ROOT / "data" / "daily.json", standing_p=cost_cfg.get("standing_charge_p", 0.0),
